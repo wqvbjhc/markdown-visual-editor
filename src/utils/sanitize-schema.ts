@@ -1,4 +1,4 @@
-export const sanitizeSchema = {
+﻿export const sanitizeSchema = {
   strip: ['script'],
   clobberPrefix: 'user-content-',
   clobber: ['name', 'id'],
@@ -9,10 +9,12 @@ export const sanitizeSchema = {
     td: ['table'],
     th: ['table'],
     tr: ['table'],
+    source: ['video'],
   },
   protocols: {
     href: ['http', 'https', 'mailto'],
-    src: ['http', 'https', 'data'],
+    src: ['http', 'https', 'data', 'local-media'],
+    poster: ['http', 'https', 'data', 'local-media'],
     cite: ['http', 'https'],
   },
   tagNames: [
@@ -21,7 +23,7 @@ export const sanitizeSchema = {
     'ul', 'ol', 'li',
     'blockquote', 'pre', 'code',
     'em', 'strong', 'del', 's', 'mark', 'sub', 'sup',
-    'a', 'img',
+    'a', 'img', 'video', 'source',
     'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',
     'div', 'span',
     'input',
@@ -29,7 +31,6 @@ export const sanitizeSchema = {
     'figure', 'figcaption',
     'abbr',
     'section', 'nav',
-    // KaTeX
     'math', 'semantics', 'mrow', 'mi', 'mo', 'mn', 'msup', 'msub',
     'mfrac', 'mover', 'munder', 'msqrt', 'mtable', 'mtr', 'mtd',
     'mtext', 'mspace', 'annotation',
@@ -39,7 +40,9 @@ export const sanitizeSchema = {
   attributes: {
     '*': ['className', 'id', 'style'],
     a: ['href', 'target', 'rel', 'title'],
-    img: ['src', 'alt', 'title', 'width', 'height', 'loading'],
+    img: ['src', 'alt', 'title', 'width', 'height', 'loading', 'decoding', 'onerror', 'crossOrigin', 'referrerPolicy', 'data-caption', 'data-width', 'data-media-kind'],
+    video: ['src', 'poster', 'controls', 'preload', 'muted', 'playsInline', 'title', 'crossOrigin', 'referrerPolicy', 'data-media-link'],
+    source: ['src', 'type'],
     input: ['type', 'checked', 'disabled'],
     td: ['align', 'valign', 'colspan', 'rowspan'],
     th: ['align', 'valign', 'colspan', 'rowspan'],
@@ -47,6 +50,7 @@ export const sanitizeSchema = {
     pre: ['className'],
     div: ['className', 'dataLanguage'],
     span: ['className', 'style'],
+    figure: ['className', 'style', 'data-media-kind', 'data-media-title', 'data-media-link', 'data-media-poster'],
     svg: ['viewBox', 'width', 'height', 'xmlns', 'fill', 'stroke'],
     path: ['d', 'fill', 'stroke', 'strokeWidth'],
     circle: ['cx', 'cy', 'r', 'fill', 'stroke'],
@@ -58,3 +62,4 @@ export const sanitizeSchema = {
     annotation: ['encoding'],
   },
 }
+

@@ -1,8 +1,9 @@
-import { unified } from 'unified'
+﻿import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkBreaks from 'remark-breaks'
+import remarkDirective from 'remark-directive'
 import remarkRehype from 'remark-rehype'
 import rehypeKatex from 'rehype-katex'
 import rehypeSanitize from 'rehype-sanitize'
@@ -13,47 +14,43 @@ import rehypeStringify from 'rehype-stringify'
 import { sanitizeSchema } from '@/utils/sanitize-schema'
 import { rehypeTableWrap } from './plugins/rehype-table-wrap'
 import { rehypeImage } from './plugins/rehype-image'
+import { rehypeVideo } from './plugins/rehype-video'
 import { rehypeMermaid } from './plugins/rehype-mermaid'
 import { remarkDeAI } from './plugins/remark-deai'
+import { remarkMediaDirective } from './plugins/remark-media-directive'
 
-const defaultProcessor = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkMath)
-  .use(remarkBreaks)
-  .use(remarkRehype, { allowDangerousHtml: true })
-  .use(rehypeKatex)
-  .use(rehypeMermaid)
-  .use(rehypeTableWrap)
-  .use(rehypeImage)
-  .use(rehypeSanitize, sanitizeSchema)
-  .use(rehypeSlug)
-  .use(rehypeAutolinkHeadings, { behavior: 'wrap' })
-  .use(rehypeExternalLinks, {
-    target: '_blank',
-    rel: ['noopener', 'noreferrer'],
-  })
-  .use(rehypeStringify, { allowDangerousHtml: true })
+function createProcessor(enableDeAI: boolean) {
+  const processor = unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkMath)
+    .use(remarkBreaks)
+    .use(remarkDirective)
 
-const deAIProcessor = unified()
-  .use(remarkParse)
-  .use(remarkGfm)
-  .use(remarkMath)
-  .use(remarkBreaks)
-  .use(remarkDeAI)
-  .use(remarkRehype, { allowDangerousHtml: true })
-  .use(rehypeKatex)
-  .use(rehypeMermaid)
-  .use(rehypeTableWrap)
-  .use(rehypeImage)
-  .use(rehypeSanitize, sanitizeSchema)
-  .use(rehypeSlug)
-  .use(rehypeAutolinkHeadings, { behavior: 'wrap' })
-  .use(rehypeExternalLinks, {
-    target: '_blank',
-    rel: ['noopener', 'noreferrer'],
-  })
-  .use(rehypeStringify, { allowDangerousHtml: true })
+  if (enableDeAI) {
+    processor.use(remarkDeAI)
+  }
+
+  return processor
+    .use(remarkMediaDirective)
+    .use(remarkRehype, { allowDangerousHtml: true })
+    .use(rehypeKatex)
+    .use(rehypeMermaid)
+    .use(rehypeTableWrap)
+    .use(rehypeImage)
+    .use(rehypeVideo)
+    .use(rehypeSanitize, sanitizeSchema)
+    .use(rehypeSlug)
+    .use(rehypeAutolinkHeadings, { behavior: 'wrap' })
+    .use(rehypeExternalLinks, {
+      target: '_blank',
+      rel: ['noopener', 'noreferrer'],
+    })
+    .use(rehypeStringify, { allowDangerousHtml: true })
+}
+
+const defaultProcessor = createProcessor(false)
+const deAIProcessor = createProcessor(true)
 
 export async function processMarkdown(md: string, enableDeAI: boolean = false): Promise<string> {
   const processor = enableDeAI ? deAIProcessor : defaultProcessor

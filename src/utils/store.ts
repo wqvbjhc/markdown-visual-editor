@@ -1,8 +1,17 @@
-import { create } from 'zustand'
+﻿import { create } from 'zustand'
 import { sampleMarkdown } from './sample'
+import type { LocalMediaKind, LocalMediaRecord } from './media'
+import { buildLocalMediaSrc } from './media'
 
 export type FormatType = 'default' | 'wechat' | 'toutiao' | 'mobile'
 export type ThemeType = 'light' | 'dark'
+
+export interface InsertResult {
+  line: number
+  insertedAt: 'cursor' | 'end'
+}
+
+type EditorInsertHandler = ((snippet: string) => InsertResult | null) | null
 
 interface AppState {
   markdown: string
@@ -12,6 +21,7 @@ interface AppState {
   colorSchemeId: string
   customAccent: string
   enableDeAI: boolean
+  localMediaMap: Record<string, LocalMediaRecord>
   setMarkdown: (md: string) => void
   setHtml: (html: string) => void
   setFormat: (f: FormatType) => void
@@ -19,6 +29,9 @@ interface AppState {
   setColorScheme: (id: string) => void
   setCustomAccent: (color: string) => void
   setEnableDeAI: (enable: boolean) => void
+  setEditorInsertHandler: (handler: EditorInsertHandler) => void
+  insertSnippet: (snippet: string) => InsertResult | null
+  registerLocalMedia: (file: File, kind: LocalMediaKind) => LocalMediaRecord
 }
 
 const savedTheme = (typeof window !== 'undefined'
@@ -41,6 +54,8 @@ const savedDeAI = typeof window !== 'undefined'
   ? localStorage.getItem('md-deai') === 'true'
   : false
 
+let editorInsertHandler: EditorInsertHandler = null
+
 export const useStore = create<AppState>((set) => ({
   markdown: savedMarkdown || sampleMarkdown,
   html: '',
@@ -49,6 +64,7 @@ export const useStore = create<AppState>((set) => ({
   colorSchemeId: savedScheme || 'geek-blue',
   customAccent: savedCustomAccent || '#6366f1',
   enableDeAI: savedDeAI,
+  localMediaMap: {},
   setMarkdown: (md) => {
     localStorage.setItem('md-content', md)
     set({ markdown: md })
@@ -73,5 +89,35 @@ export const useStore = create<AppState>((set) => ({
   setEnableDeAI: (enable) => {
     localStorage.setItem('md-deai', String(enable))
     set({ enableDeAI: enable })
+  },
+  setEditorInsertHandler: (handler) => {
+    editorInsertHandler = handler
+  },
+  insertSnippet: (snippet) => editorInsertHandler ? editorInsertHandler(snippet) : null,
+  registerLocalMedia: (file, kind) => {
+    const id = typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${kind}-${Date.now()}`
+    const record: LocalMediaRecord = {
+      id,
+      kind,
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      objectUrl: URL.createObjectURL(file),
+      file,
+    }
+
+    set((state) => ({
+      localMediaMap: {
+        ...state.localMediaMap,
+        [record.id]: record,
+      },
+    }))
+
+    return {
+      ...record,
+      objectUrl: buildLocalMediaSrc(record.id),
+    }
   },
 }))

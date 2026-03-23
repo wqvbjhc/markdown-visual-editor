@@ -1,38 +1,40 @@
-export const sampleMarkdown = `# Markdown 可视化编辑器
+﻿export const sampleMarkdown = `# Markdown Visual Editor
 
-> 支持 GFM、数学公式、Mermaid 图表、代码高亮等丰富语法。
+> Rich Markdown preview with platform-aware export, local media preview, and PDF output.
 
-## 基础语法
+## Highlights
 
-这是一段**粗体**和*斜体*以及~~删除线~~文本。
+- GFM tables, task lists, and footnotes
+- KaTeX math rendering
+- Mermaid diagrams
+- Syntax-highlighted code blocks
+- Image and video directives
 
-### 任务列表
+## Extended image directive
 
-- [x] 支持 GFM 表格
-- [x] 支持数学公式
-- [ ] 支持 Mermaid 图表
-- [ ] 支持脚注
+::image{src="https://picsum.photos/900/480" alt="Sample landscape" caption="Remote image rendered as a figure with caption." width="720px"}
 
-### 表格
+## Standard image markdown
 
-| 功能 | 状态 | 说明 |
-|------|:----:|------|
-| GFM | ✅ | 完整支持 |
-| KaTeX | ✅ | 行内和块级 |
-| Mermaid | ✅ | 流程图等 |
-| 代码高亮 | ✅ | shiki 驱动 |
+![Fallback image example](https://picsum.photos/720/360 "Markdown image title")
 
-## 数学公式
+## Extended video directive
 
-行内公式：$E = mc^2$，以及 $\\sum_{i=1}^{n} x_i$。
+::video{src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" poster="https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1280&q=80" title="Preview videos in default/mobile, export as card in WeChat/Toutiao" href="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"}
 
-块级公式：
+## Raw HTML video
+
+<video controls poster="https://images.unsplash.com/photo-1493246507139-91e8fad9978e?auto=format&fit=crop&w=1280&q=80" title="Raw HTML video also works" src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"></video>
+
+## Math
+
+Inline math: $E = mc^2$ and $\\sum_{i=1}^{n} x_i$.
 
 $$
 \\int_{-\\infty}^{\\infty} e^{-x^2} dx = \\sqrt{\\pi}
 $$
 
-## 代码块
+## Code
 
 \`\`\`typescript
 interface User {
@@ -48,47 +50,25 @@ async function fetchUser(id: number): Promise<User> {
 }
 \`\`\`
 
-\`\`\`python
-def fibonacci(n: int) -> list[int]:
-    fib = [0, 1]
-    for i in range(2, n):
-        fib.append(fib[-1] + fib[-2])
-    return fib[:n]
-
-print(fibonacci(10))
-\`\`\`
-
-## Mermaid 图表
+## Mermaid
 
 \`\`\`mermaid
 graph TD
-    A[开始] --> B{条件判断}
-    B -->|是| C[执行操作A]
-    B -->|否| D[执行操作B]
-    C --> E[结束]
+    A[Draft] --> B{Has media?}
+    B -->|Yes| C[Preview with images and videos]
+    B -->|No| D[Export as formatted article]
+    C --> E[Copy to WeChat or Toutiao]
     D --> E
 \`\`\`
 
-## 图片
+## Table
 
-![示例图片](https://picsum.photos/600/300)
+| Format | Images | Videos |
+|--------|--------|--------|
+| Default | Native preview | Native preview |
+| WeChat | Styled export | Poster + title + link |
+| Toutiao | Styled export | Poster + title + link |
+| Mobile | Native preview in phone frame | Native preview in phone frame |
 
-## 链接
-
-[GitHub](https://github.com) | [Google](https://google.com)
-
-## 引用
-
-> 代码是写给人看的，附带能在机器上运行。
-> — Harold Abelson
-
-## 脚注
-
-这是一个脚注示例[^1]。
-
-[^1]: 这是脚注的内容。
-
----
-
-*使用本编辑器，体验 Markdown 的强大功能。*
+[^1]: Local files are session-only for preview. Local image copying is best effort and depends on browser/editor paste handling.
 `

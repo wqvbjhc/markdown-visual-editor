@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+﻿import { useEffect, useRef, useCallback } from 'react'
 import { useStore } from '@/utils/store'
 import { MermaidBlock } from './MermaidBlock'
 import { CodeBlock } from './CodeBlock'
@@ -6,14 +6,15 @@ import { createRoot } from 'react-dom/client'
 import { applyWechatStyles } from '@/formats/wechat'
 import { applyToutiaoStyles } from '@/formats/toutiao'
 import { getCurrentAccent } from '@/utils/color-schemes'
+import { hydrateLocalMedia } from '@/utils/media'
 
 export function Preview() {
-  const { html, format, theme, colorSchemeId, customAccent } = useStore()
+  const { html, format, theme, colorSchemeId, customAccent, localMediaMap } = useStore()
   const containerRef = useRef<HTMLDivElement>(null)
   const isDark = theme === 'dark'
   const accent = getCurrentAccent(colorSchemeId, theme, customAccent)
 
-  const renderContent = useCallback(() => {
+  const renderContent = useCallback(async () => {
     const el = containerRef.current
     if (!el) return
 
@@ -22,6 +23,7 @@ export function Preview() {
     else if (format === 'toutiao') content = applyToutiaoStyles(html, accent)
 
     el.innerHTML = content
+    await hydrateLocalMedia(el, localMediaMap)
 
     el.querySelectorAll<HTMLElement>('.mermaid-block').forEach((block) => {
       const code = block.getAttribute('data-mermaid') || block.textContent || ''
@@ -42,9 +44,11 @@ export function Preview() {
       const root = createRoot(wrapper)
       root.render(<CodeBlock code={code} lang={lang} isDark={isDark} />)
     })
-  }, [html, format, isDark, accent])
+  }, [html, format, isDark, accent, localMediaMap])
 
-  useEffect(() => { renderContent() }, [renderContent])
+  useEffect(() => {
+    void renderContent()
+  }, [renderContent])
 
   const wrapperClass = format === 'mobile'
     ? 'mobile-frame'
