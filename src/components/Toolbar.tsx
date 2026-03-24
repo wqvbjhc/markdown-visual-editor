@@ -5,7 +5,7 @@ import { applyWechatStyles } from '@/formats/wechat'
 import { applyToutiaoStyles } from '@/formats/toutiao'
 import { colorSchemes, getCurrentAccent } from '@/utils/color-schemes'
 import { exportCurrentPreviewAsPdf } from '@/utils/pdf'
-import { buildImageDirective, escapeDirectiveValue } from '@/utils/media'
+import { buildImageDirective, buildVideoDirective } from '@/utils/media'
 import { prepareClipboardHtml, validateVideoExport } from '@/utils/media-export'
 import { MediaInsertModal } from './MediaInsertModal'
 
@@ -60,20 +60,13 @@ function buildImageSnippet(payload: ImagePayload, src: string): string {
 
 function buildVideoSnippet(payload: VideoPayload, src: string, poster: string): string {
   const title = payload.title || payload.file?.name.replace(/\.[^.]+$/, '') || 'Video'
-  const attrs = [
-    `controls`,
-    `preload="metadata"`,
-    `playsinline`,
-    `title="${escapeDirectiveValue(title)}"`,
-    `data-media-link="${escapeDirectiveValue(payload.link || src)}"`,
-    `src="${escapeDirectiveValue(src)}"`,
-  ]
 
-  if (poster) {
-    attrs.push(`poster="${escapeDirectiveValue(poster)}"`)
-  }
-
-  return wrapBlock(`<video ${attrs.join(' ')}></video>`)
+  return wrapBlock(buildVideoDirective({
+    src,
+    poster,
+    title,
+    href: payload.link || src,
+  }))
 }
 
 export function Toolbar() {
@@ -302,4 +295,5 @@ export function Toolbar() {
     </>
   )
 }
+
 

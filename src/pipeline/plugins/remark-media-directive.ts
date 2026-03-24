@@ -1,15 +1,48 @@
-﻿import type { Root } from 'mdast'
+import type { Root } from 'mdast'
 import { visit } from 'unist-util-visit'
 
 type DirectiveNode = {
-  type: 'containerDirective' | 'leafDirective' | 'textDirective'
+  type: 'containerDirective' | 'leafDirective' | 'textDirective' | 'html'
   name?: string
   attributes?: Record<string, string>
+  value?: string
   data?: Record<string, unknown>
 }
 
 function textNode(value: string) {
   return { type: 'text', value }
+}
+
+function parseHtmlAttributes(value: string): Record<string, string> {
+  const attrs: Record<string, string> = {}
+  const attrRe = /([:\w-]+)(?:=(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g
+  let match: RegExpExecArray | null
+
+  while ((match = attrRe.exec(value)) !== null) {
+    const name = match[1]
+    const raw = match[2] ?? match[3] ?? match[4] ?? 'true'
+    attrs[name] = raw
+  }
+
+  return attrs
+}
+
+function normalizeHtmlVideo(node: DirectiveNode) {
+  if (node.type !== 'html' || !node.value) return
+  const trimmed = node.value.trim()
+  const match = trimmed.match(/^<video\b([^>]*)>(?:[\s\S]*?<\/video>)?$/i)
+  if (!match) return
+
+  const attrs = parseHtmlAttributes(match[1] || '')
+  node.type = 'leafDirective'
+  node.name = 'video'
+  node.attributes = {
+    src: attrs.src || '',
+    poster: attrs.poster || '',
+    title: attrs.title || 'Video',
+    href: attrs['data-media-link'] || attrs.href || attrs.src || '',
+  }
+  delete node.value
 }
 
 function createFigure(node: DirectiveNode) {
@@ -91,6 +124,9 @@ export function remarkMediaDirective() {
   return (tree: Root) => {
     visit(tree, (node) => {
       const directive = node as DirectiveNode
+      if (directive.type === 'html') {
+        normalizeHtmlVideo(directive)
+      }
       if (!directive?.name || !['image', 'video'].includes(directive.name)) return
       createFigure(directive)
     })

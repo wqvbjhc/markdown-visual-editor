@@ -1,5 +1,5 @@
-﻿import type { LocalMediaRecord } from './media'
-import { blobToDataUrl, getVideoLink, getVideoPoster, parseLocalMediaId } from './media'
+import type { LocalMediaRecord } from './media'
+import { blobToDataUrl, getVideoLink, parseLocalMediaId } from './media'
 
 export interface CopyPreparationResult {
   html: string
@@ -14,7 +14,7 @@ function isPublicHref(value: string): boolean {
 
 export function validateVideoExport(
   html: string,
-  localMediaMap: Record<string, LocalMediaRecord>,
+  _localMediaMap: Record<string, LocalMediaRecord>,
 ): string[] {
   const parser = new DOMParser()
   const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html')
@@ -22,19 +22,14 @@ export function validateVideoExport(
   if (!root) return []
 
   const errors: string[] = []
-  const candidates = Array.from(root.querySelectorAll('figure.media-video, video'))
+  const figures = Array.from(root.querySelectorAll('figure.media-video'))
+  const standalones = Array.from(root.querySelectorAll('video')).filter((node) => !node.closest('figure.media-video'))
+  const candidates = [...figures, ...standalones]
 
   candidates.forEach((node, index) => {
     const link = getVideoLink(node)
-    const poster = getVideoPoster(node)
-    const posterMediaId = parseLocalMediaId(poster)
-
     if (!link || parseLocalMediaId(link) || !isPublicHref(link)) {
-      errors.push(`Video ${index + 1} is missing a public link. Add href="https://...".`)
-    }
-
-    if (!poster || (posterMediaId && !localMediaMap[posterMediaId])) {
-      errors.push(`Video ${index + 1} is missing a valid poster image.`)
+      errors.push(`? ${index + 1} ???????????`)
     }
   })
 
@@ -68,7 +63,7 @@ export async function prepareClipboardHtml(
   }
 
   if (localImages.length > 1) {
-    warnings.push('本地图片已以内嵌 HTML 方式复制，目标平台是否自动上传仍取决于浏览器和编辑器。')
+    warnings.push('???????? HTML ???????????????????????????')
   }
 
   const firstImage = localImages.length === 1 ? localImages[0] : undefined

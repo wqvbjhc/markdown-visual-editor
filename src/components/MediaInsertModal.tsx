@@ -162,8 +162,9 @@ export function MediaInsertModal({ kind, open, onClose, onSubmit }: MediaInsertM
               <label className="media-field">
                 <span>{kind === 'image' ? '图片地址' : '预览视频地址'}</span>
                 <input
+                  key={`media-url-${kind}`}
                   ref={firstInputRef}
-                  value={src}
+                  value={src || ''}
                   onChange={(event) => setSrc(event.target.value)}
                   placeholder={kind === 'image' ? 'https://example.com/demo.png' : 'https://example.com/demo.mp4'}
                 />
@@ -172,6 +173,7 @@ export function MediaInsertModal({ kind, open, onClose, onSubmit }: MediaInsertM
               <label className="media-field media-file-field">
                 <span>{kind === 'image' ? '选择图片文件' : '选择视频文件'}</span>
                 <input
+                  key={`media-file-${kind}`}
                   ref={firstInputRef}
                   type="file"
                   accept={kind === 'image' ? 'image/*' : 'video/*'}
@@ -186,26 +188,26 @@ export function MediaInsertModal({ kind, open, onClose, onSubmit }: MediaInsertM
             <>
               <label className="media-field">
                 <span>图注</span>
-                <input value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="图片下方说明，可选" />
+                <input value={caption || ''} onChange={(event) => setCaption(event.target.value)} placeholder="图片下方说明，可选" />
               </label>
               <label className="media-field">
                 <span>alt 文本</span>
-                <input value={alt} onChange={(event) => setAlt(event.target.value)} placeholder="用于无图或无障碍，可选" />
+                <input value={alt || ''} onChange={(event) => setAlt(event.target.value)} placeholder="用于无图或无障碍，可选" />
               </label>
               <label className="media-field">
                 <span>显示宽度</span>
-                <input value={width} onChange={(event) => setWidth(event.target.value)} placeholder="例如 720px 或 80%，可选" />
+                <input value={width || ''} onChange={(event) => setWidth(event.target.value)} placeholder="例如 720px 或 80%，可选" />
               </label>
             </>
           ) : (
             <>
               <label className="media-field">
                 <span>视频标题</span>
-                <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="平台卡片会展示这个标题" />
+                <input value={title || ''} onChange={(event) => setTitle(event.target.value)} placeholder="平台卡片会展示这个标题" />
               </label>
               <label className="media-field">
                 <span>平台跳转链接</span>
-                <input value={link} onChange={(event) => setLink(event.target.value)} placeholder="公众号 / 头条号点击卡片后打开的链接，建议填写 https://..." />
+                <input value={link || ''} onChange={(event) => setLink(event.target.value)} placeholder="公众号 / 头条号点击卡片后打开的链接，建议填写 https://..." />
               </label>
               <div className="media-form-block media-form-subblock">
                 <label>平台封面</label>
@@ -228,12 +230,12 @@ export function MediaInsertModal({ kind, open, onClose, onSubmit }: MediaInsertM
                 {posterMode === 'url' ? (
                   <label className="media-field">
                     <span>封面图片地址</span>
-                    <input value={posterSrc} onChange={(event) => setPosterSrc(event.target.value)} placeholder="https://example.com/poster.png" />
+                    <input key="poster-url" value={posterSrc || ''} onChange={(event) => setPosterSrc(event.target.value)} placeholder="https://example.com/poster.png" />
                   </label>
                 ) : (
                   <label className="media-field media-file-field">
                     <span>选择封面图片</span>
-                    <input type="file" accept="image/*" onChange={(event) => setPosterFile(event.target.files?.[0] || null)} />
+                    <input key="poster-file" type="file" accept="image/*" onChange={(event) => setPosterFile(event.target.files?.[0] || null)} />
                     <small>{fileLabel(posterFile, '尚未选择封面图片')}</small>
                   </label>
                 )}
@@ -256,3 +258,4 @@ export function MediaInsertModal({ kind, open, onClose, onSubmit }: MediaInsertM
     </div>
   )
 }
+

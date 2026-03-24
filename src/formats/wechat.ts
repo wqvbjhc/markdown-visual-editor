@@ -1,5 +1,5 @@
 ﻿import { inlineKatexStyles, type ExportMode } from './katex-inline'
-import { getVideoLink, getVideoPoster, getVideoTitle } from '@/utils/media'
+import { buildVideoPosterFallback, getVideoLink, getVideoPoster, getVideoTitle } from '@/utils/media'
 
 function buildTagStyles(accent: string): Record<string, string> {
   return {
@@ -34,9 +34,9 @@ function replaceVideoNodes(root: HTMLElement, accent: string) {
   nodes.forEach((node) => {
     if (node instanceof HTMLElement && node.dataset.platformCard === 'true') return
 
-    const poster = getVideoPoster(node)
-    const link = getVideoLink(node)
     const title = getVideoTitle(node)
+    const poster = getVideoPoster(node) || buildVideoPosterFallback(title)
+    const link = getVideoLink(node)
     const wrapper = root.ownerDocument.createElement('figure')
     wrapper.dataset.platformCard = 'true'
     wrapper.setAttribute('style', 'margin:20px 0;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 10px 30px rgba(15,23,42,0.06);')

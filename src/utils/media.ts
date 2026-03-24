@@ -68,6 +68,10 @@ export function buildMissingMediaSvg(kind: LocalMediaKind, label: string): strin
   )}`
 }
 
+export function buildVideoPosterFallback(title: string): string {
+  return buildMissingMediaSvg('video', title || 'Preview available in editor')
+}
+
 export function getVideoSource(element: Element): string {
   if (element instanceof HTMLVideoElement) {
     const direct = element.getAttribute('src') || ''
