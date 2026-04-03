@@ -255,11 +255,19 @@ export function Toolbar() {
                     }}
                     className={`palette-item ${colorSchemeId === s.id ? 'active' : ''}`}
                   >
-                    <span
-                      className="palette-dot"
-                      style={{ background: s.light['--accent'] }}
-                    />
-                    {s.name}
+                    <span className="palette-swatch-group" aria-hidden="true">
+                      {s.preview.map((color) => (
+                        <span
+                          key={color}
+                          className="palette-swatch"
+                          style={{ background: color }}
+                        />
+                      ))}
+                    </span>
+                    <span className="palette-copy">
+                      <span className="palette-name">{s.name}</span>
+                      <span className="palette-desc">{s.description}</span>
+                    </span>
                   </button>
                 ))}
                 <label className={`palette-item ${colorSchemeId === 'custom' ? 'active' : ''}`}>

@@ -4,7 +4,7 @@ import { processMarkdown } from '@/pipeline/processor'
 import { MarkdownEditor } from '@/components/Editor'
 import { Preview } from '@/components/Preview'
 import { Toolbar } from '@/components/Toolbar'
-import { colorSchemes, applyColorScheme, applyCustomColor } from '@/utils/color-schemes'
+import { applyColorScheme, applyCustomColor, getSchemeById } from '@/utils/color-schemes'
 
 export default function App() {
   const { markdown, setHtml, theme, colorSchemeId, customAccent, enableDeAI } = useStore()
@@ -14,10 +14,10 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme)
     if (colorSchemeId === 'custom') {
       applyCustomColor(customAccent, theme)
-    } else {
-      const scheme = colorSchemes.find((s) => s.id === colorSchemeId) || colorSchemes[0]
-      applyColorScheme(scheme, theme)
+      return
     }
+
+    applyColorScheme(getSchemeById(colorSchemeId), theme)
   }, [theme, colorSchemeId, customAccent])
 
   const renderMarkdown = useCallback(async (md: string, deAI: boolean) => {
@@ -30,11 +30,16 @@ export default function App() {
   }, [setHtml])
 
   useEffect(() => {
-    if (!markdown) return
     clearTimeout(timerRef.current)
+
+    if (!markdown) {
+      setHtml('')
+      return
+    }
+
     timerRef.current = setTimeout(() => renderMarkdown(markdown, enableDeAI), 200)
     return () => clearTimeout(timerRef.current)
-  }, [markdown, enableDeAI, renderMarkdown])
+  }, [markdown, enableDeAI, renderMarkdown, setHtml])
 
   return (
     <div className="app-layout">

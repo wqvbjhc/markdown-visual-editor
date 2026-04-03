@@ -75,6 +75,32 @@ function replaceVideoNodes(root: HTMLElement, accent: string) {
   })
 }
 
+function normalizeOrderedLists(root: HTMLElement) {
+  const orderedLists = Array.from(root.querySelectorAll('ol'))
+
+  orderedLists.forEach((list) => {
+    const start = Number.parseInt(list.getAttribute('start') || '1', 10)
+    const listStart = Number.isNaN(start) ? 1 : start
+    let current = listStart
+
+    ;(list as HTMLElement).style.listStyle = 'decimal'
+    ;(list as HTMLElement).style.listStyleType = 'decimal'
+    ;(list as HTMLElement).style.paddingLeft = '24px'
+
+    Array.from(list.children).forEach((child) => {
+      if (!(child instanceof HTMLElement) || child.tagName !== 'LI') return
+
+      const value = Number.parseInt(child.getAttribute('value') || '', 10)
+      if (!Number.isNaN(value)) current = value
+
+      child.style.listStyle = 'decimal'
+      child.style.listStyleType = 'decimal'
+      child.setAttribute('data-export-ol-index', String(current))
+      current += 1
+    })
+  })
+}
+
 export function applyWechatStyles(html: string, accent = '#07c160'): string {
   const processed = inlineKatexStyles(html, 'wechat' as ExportMode)
   const tagStyles = buildTagStyles(accent)
@@ -84,6 +110,7 @@ export function applyWechatStyles(html: string, accent = '#07c160'): string {
   const root = doc.body.firstElementChild as HTMLElement
 
   replaceVideoNodes(root, accent)
+  normalizeOrderedLists(root)
 
   for (const [tag, style] of Object.entries(tagStyles)) {
     root.querySelectorAll(tag).forEach((el) => {
