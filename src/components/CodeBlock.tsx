@@ -7,28 +7,37 @@ interface Props {
   isDark: boolean
 }
 
+export function normalizeCodeBlockText(code: string) {
+  return code.endsWith('\n') ? code.slice(0, -1) : code
+}
+
+export function getCodeBlockLines(code: string) {
+  return normalizeCodeBlockText(code).split('\n')
+}
+
 export function CodeBlock({ code, lang, isDark }: Props) {
   const [html, setHtml] = useState('')
   const [copied, setCopied] = useState(false)
+  const normalizedCode = normalizeCodeBlockText(code)
 
   useEffect(() => {
     let cancelled = false
-    codeToHtml(code, {
+    codeToHtml(normalizedCode, {
       lang: lang || 'text',
       theme: isDark ? 'github-dark' : 'github-light',
     })
       .then((result) => { if (!cancelled) setHtml(result) })
-      .catch(() => { if (!cancelled) setHtml(`<pre><code>${escapeHtml(code)}</code></pre>`) })
+      .catch(() => { if (!cancelled) setHtml(`<pre><code>${escapeHtml(normalizedCode)}</code></pre>`) })
     return () => { cancelled = true }
-  }, [code, lang, isDark])
+  }, [normalizedCode, lang, isDark])
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(code)
+    await navigator.clipboard.writeText(normalizedCode)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const lines = code.split('\n')
+  const lines = getCodeBlockLines(normalizedCode)
 
   return (
     <div className="code-block-wrapper">

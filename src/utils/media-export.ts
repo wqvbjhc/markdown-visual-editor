@@ -1,3 +1,4 @@
+import { normalizeCodeBlockText } from '@/components/CodeBlock'
 import type { LocalMediaRecord } from './media'
 import { blobToDataUrl, getVideoLink, parseLocalMediaId } from './media'
 
@@ -49,6 +50,11 @@ export async function prepareClipboardHtml(
 
   const warnings: string[] = []
   const localImages: LocalMediaRecord[] = []
+
+  const codeElements = Array.from(root.querySelectorAll<HTMLElement>('pre code'))
+  codeElements.forEach((codeEl) => {
+    codeEl.textContent = normalizeCodeBlockText(codeEl.textContent || '')
+  })
 
   const imageElements = Array.from(root.querySelectorAll<HTMLImageElement>('img[src]'))
   for (const img of imageElements) {
