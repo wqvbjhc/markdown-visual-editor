@@ -98,6 +98,18 @@ function normalizeOrderedLists(root: HTMLElement) {
   })
 }
 
+function normalizeToutiaoLinks(root: HTMLElement) {
+  root.querySelectorAll('a').forEach((el) => {
+    const anchor = el as HTMLAnchorElement
+    const href = anchor.getAttribute('href') || ''
+    if (!/^https?:/i.test(href)) return
+
+    anchor.removeAttribute('target')
+    anchor.removeAttribute('rel')
+    anchor.setAttribute('title', href)
+  })
+}
+
 export function applyToutiaoStyles(html: string, accent = '#e74c3c'): string {
   const processed = inlineKatexStyles(html, 'toutiao' as ExportMode)
   const tagStyles = buildTagStyles(accent)
@@ -108,6 +120,7 @@ export function applyToutiaoStyles(html: string, accent = '#e74c3c'): string {
 
   replaceVideoNodes(root, accent)
   normalizeOrderedLists(root)
+  normalizeToutiaoLinks(root)
 
   for (const [tag, style] of Object.entries(tagStyles)) {
     root.querySelectorAll(tag).forEach((el) => {

@@ -48,6 +48,8 @@
     th: ['align', 'valign', 'colspan', 'rowspan'],
     code: ['className'],
     pre: ['className'],
+    ol: ['start'],
+    li: ['value'],
     div: ['className', 'dataLanguage'],
     span: ['className', 'style'],
     figure: ['className', 'style', 'data-media-kind', 'data-media-title', 'data-media-link', 'data-media-poster'],
