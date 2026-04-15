@@ -84,6 +84,7 @@ export function Toolbar() {
     setEnableDeAI,
     insertSnippet,
     registerLocalMedia,
+    setRelativeMediaEntries,
     localMediaMap,
   } = useStore()
   const [copyTip, setCopyTip] = useState('')
@@ -135,6 +136,39 @@ export function Toolbar() {
     if (!src) return
 
     finishInsert(buildVideoSnippet(payload, src, poster), '视频')
+  }
+
+  const handlePickImageDirectory = async () => {
+    const picker = (window as Window & { showDirectoryPicker?: () => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker
+    if (!picker) {
+      setTransientTip(setCopyTip, '当前浏览器不支持目录授权')
+      return
+    }
+
+    try {
+      const handle = await picker.call(window)
+      const entries: Array<{ path: string; dataUrl: string }> = []
+      const iterator = (handle as unknown as { entries: () => AsyncIterable<[string, FileSystemHandle]> }).entries()
+
+      for await (const [name, entry] of iterator) {
+        if (entry.kind !== 'file') continue
+        const fileHandle = entry as FileSystemFileHandle
+        const file = await fileHandle.getFile()
+        if (!file.type.startsWith('image/')) continue
+        const reader = new FileReader()
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(String(reader.result || ''))
+          reader.onerror = () => reject(reader.error || new Error('Failed to read image file'))
+          reader.readAsDataURL(file)
+        })
+        entries.push({ path: name, dataUrl })
+      }
+
+      setRelativeMediaEntries(entries)
+      setTransientTip(setCopyTip, entries.length > 0 ? `已载入 ${entries.length} 张本地图片` : '目录中未找到图片文件')
+    } catch {
+      setTransientTip(setCopyTip, '目录授权已取消')
+    }
   }
 
   const handleCopy = async () => {
@@ -216,6 +250,10 @@ export function Toolbar() {
           <button onClick={() => setModalKind('video')} className="toolbar-btn toolbar-inline" title="插入视频">
             <FiVideo size={14} />
             <span>视频</span>
+          </button>
+          <button onClick={handlePickImageDirectory} className="toolbar-btn toolbar-inline" title="选择图片目录">
+            <FiImage size={14} />
+            <span>图片目录</span>
           </button>
           <button onClick={handleCopy} className="toolbar-btn" title="复制内容">
             {copyTip || '复制'}

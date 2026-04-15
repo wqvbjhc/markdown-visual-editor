@@ -10,7 +10,23 @@ export interface LocalMediaRecord {
   file: File
 }
 
+export interface PersistedLocalMediaRecord {
+  id: string
+  kind: LocalMediaKind
+  name: string
+  type: string
+  size: number
+  dataUrl: string
+}
+
+export interface RelativeMediaEntry {
+  path: string
+  dataUrl: string
+}
+
 export const LOCAL_MEDIA_PROTOCOL = 'local-media://'
+export const LOCAL_MEDIA_STORAGE_KEY = 'md-local-media'
+export const RELATIVE_MEDIA_STORAGE_KEY = 'md-relative-media'
 
 const SVG_BG = '#f3f4f6'
 const SVG_FG = '#6b7280'
@@ -127,24 +143,80 @@ export async function blobToDataUrl(blob: Blob): Promise<string> {
   })
 }
 
+export function readPersistedLocalMedia(): Record<string, PersistedLocalMediaRecord> {
+  if (typeof localStorage === 'undefined') return {}
+
+  try {
+    const raw = localStorage.getItem(LOCAL_MEDIA_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as PersistedLocalMediaRecord[]
+    return Object.fromEntries(parsed.map((record) => [record.id, record]))
+  } catch {
+    return {}
+  }
+}
+
+export function normalizeRelativeMediaPath(src: string): string | null {
+  const normalized = src.trim().replace(/\\/g, '/').replace(/^\.\//, '')
+  if (!normalized) return null
+  if (/^(https?:|data:|local-media:|file:)/i.test(normalized)) return null
+  if (normalized.startsWith('../')) return null
+  return normalized
+}
+
+export function readPersistedRelativeMedia(): Record<string, RelativeMediaEntry> {
+  if (typeof localStorage === 'undefined') return {}
+
+  try {
+    const raw = localStorage.getItem(RELATIVE_MEDIA_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw) as RelativeMediaEntry[]
+    return Object.fromEntries(parsed.map((entry) => [entry.path, entry]))
+  } catch {
+    return {}
+  }
+}
+
 export async function hydrateLocalMedia(
   root: ParentNode,
   localMediaMap: Record<string, LocalMediaRecord>,
 ): Promise<void> {
-  root.querySelectorAll<HTMLImageElement>('img[src]').forEach((img) => {
-    const mediaId = parseLocalMediaId(img.getAttribute('src'))
-    if (!mediaId) return
+  const persistedMediaMap = readPersistedLocalMedia()
+  const persistedRelativeMedia = readPersistedRelativeMedia()
 
-    const media = localMediaMap[mediaId]
-    if (media?.kind === 'image') {
-      img.src = media.objectUrl
-      img.dataset.localMediaResolved = 'true'
+  root.querySelectorAll<HTMLImageElement>('img[src]').forEach((img) => {
+    const rawSrc = img.getAttribute('src') || ''
+    const mediaId = parseLocalMediaId(rawSrc)
+    if (mediaId) {
+      const media = localMediaMap[mediaId]
+      if (media?.kind === 'image') {
+        img.src = media.objectUrl
+        img.dataset.localMediaResolved = 'true'
+        return
+      }
+
+      const persisted = persistedMediaMap[mediaId]
+      if (persisted?.kind === 'image') {
+        img.src = persisted.dataUrl
+        img.dataset.localMediaResolved = 'persisted'
+        return
+      }
+
+      img.src = buildMissingMediaSvg('image', 'Please re-select the local image file.')
+      img.classList.add('img-fallback', 'media-missing')
+      img.alt = img.alt || 'Local image unavailable'
       return
     }
 
-    img.src = buildMissingMediaSvg('image', 'Please re-select the local image file.')
-    img.classList.add('img-fallback', 'media-missing')
-    img.alt = img.alt || 'Local image unavailable'
+    const relativePath = normalizeRelativeMediaPath(rawSrc)
+    if (!relativePath) return
+
+    const relativeEntry = persistedRelativeMedia[relativePath]
+    if (relativeEntry) {
+      img.src = relativeEntry.dataUrl
+      img.dataset.localMediaResolved = 'relative'
+      return
+    }
   })
 
   root.querySelectorAll<HTMLElement>('[poster]').forEach((el) => {
@@ -152,11 +224,14 @@ export async function hydrateLocalMedia(
     if (!mediaId) return
 
     const media = localMediaMap[mediaId]
+    const persisted = persistedMediaMap[mediaId]
     el.setAttribute(
       'poster',
       media?.kind === 'image'
         ? media.objectUrl
-        : buildMissingMediaSvg('image', 'Please re-select the local poster image.'),
+        : persisted?.kind === 'image'
+          ? persisted.dataUrl
+          : buildMissingMediaSvg('image', 'Please re-select the local poster image.'),
     )
   })
 
@@ -175,6 +250,18 @@ export async function hydrateLocalMedia(
         video.load()
       }
       video.dataset.localMediaResolved = 'true'
+      return
+    }
+
+    const persisted = persistedMediaMap[mediaId]
+    if (persisted?.kind === 'video') {
+      if (video.hasAttribute('src')) {
+        video.src = persisted.dataUrl
+      } else if (source) {
+        source.src = persisted.dataUrl
+        video.load()
+      }
+      video.dataset.localMediaResolved = 'persisted'
       return
     }
 

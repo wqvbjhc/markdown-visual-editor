@@ -1,6 +1,6 @@
 import { normalizeCodeBlockText } from '@/components/CodeBlock'
 import type { LocalMediaRecord } from './media'
-import { blobToDataUrl, getVideoLink, parseLocalMediaId } from './media'
+import { blobToDataUrl, getVideoLink, normalizeRelativeMediaPath, parseLocalMediaId, readPersistedRelativeMedia } from './media'
 
 export interface CopyPreparationResult {
   html: string
@@ -50,6 +50,7 @@ export async function prepareClipboardHtml(
 
   const warnings: string[] = []
   const localImages: LocalMediaRecord[] = []
+  const persistedRelativeMedia = readPersistedRelativeMedia()
 
   const codeElements = Array.from(root.querySelectorAll<HTMLElement>('pre code'))
   codeElements.forEach((codeEl) => {
@@ -58,14 +59,22 @@ export async function prepareClipboardHtml(
 
   const imageElements = Array.from(root.querySelectorAll<HTMLImageElement>('img[src]'))
   for (const img of imageElements) {
-    const mediaId = parseLocalMediaId(img.getAttribute('src'))
-    if (!mediaId) continue
+    const rawSrc = img.getAttribute('src') || ''
+    const mediaId = parseLocalMediaId(rawSrc)
+    if (mediaId) {
+      const media = localMediaMap[mediaId]
+      if (!media || media.kind !== 'image') continue
+      const dataUrl = await blobToDataUrl(media.file)
+      img.setAttribute('src', dataUrl)
+      localImages.push(media)
+      continue
+    }
 
-    const media = localMediaMap[mediaId]
-    if (!media || media.kind !== 'image') continue
-    const dataUrl = await blobToDataUrl(media.file)
-    img.setAttribute('src', dataUrl)
-    localImages.push(media)
+    const relativePath = normalizeRelativeMediaPath(rawSrc)
+    if (!relativePath) continue
+    const persisted = persistedRelativeMedia[relativePath]
+    if (!persisted) continue
+    img.setAttribute('src', persisted.dataUrl)
   }
 
   if (localImages.length > 1) {

@@ -32,7 +32,7 @@ export function rehypeImage() {
       const parentElement = parent as Element | undefined
       if (!parentElement || parentElement.tagName === 'figure' || typeof index !== 'number') return
 
-      const caption = String(node.properties['data-caption'] || node.properties.title || '').trim()
+      const caption = String(node.properties['data-caption'] || '').trim()
       const width = String(node.properties['data-width'] || '').trim()
       if (!caption && !width) return
 
