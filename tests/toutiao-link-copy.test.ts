@@ -11,20 +11,8 @@ assert.match(
 
 assert.match(
   toutiaoSource,
-  /removeAttribute\('target'\)/,
-  'Toutiao export should normalize target handling for external links',
-)
-
-assert.match(
-  toutiaoSource,
-  /removeAttribute\('rel'\)/,
-  'Toutiao export should normalize rel handling for external links',
-)
-
-assert.match(
-  toutiaoSource,
-  /setAttribute\('title', href\)/,
-  'Toutiao export should preserve the URL as title metadata',
+  /replaceWith\(root\.ownerDocument\.createTextNode\(href\)\)/,
+  'Toutiao export should replace unsupported anchors with inline URL text so paste does not introduce an extra line break',
 )
 
 console.log('toutiao link copy handling ok')

@@ -104,9 +104,7 @@ function normalizeToutiaoLinks(root: HTMLElement) {
     const href = anchor.getAttribute('href') || ''
     if (!/^https?:/i.test(href)) return
 
-    anchor.removeAttribute('target')
-    anchor.removeAttribute('rel')
-    anchor.setAttribute('title', href)
+    anchor.replaceWith(root.ownerDocument.createTextNode(href))
   })
 }
 
