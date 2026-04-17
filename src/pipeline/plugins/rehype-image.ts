@@ -23,6 +23,7 @@ export function rehypeImage() {
         crossOrigin: 'anonymous',
         onerror: "this.onerror=null;this.src='data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"150\" fill=\"%23ccc\"><rect width=\"200\" height=\"150\" rx=\"8\"/><text x=\"50%\" y=\"50%\" text-anchor=\"middle\" dy=\".3em\" fill=\"%23999\" font-size=\"14\">Image not found</text></svg>';this.classList.add('img-fallback')",
         'data-media-kind': 'image',
+        'data-original-src': node.properties.src,
       }
 
       if (!node.properties.className) {

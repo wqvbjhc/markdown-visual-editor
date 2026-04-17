@@ -185,7 +185,7 @@ export async function hydrateLocalMedia(
   const persistedRelativeMedia = readPersistedRelativeMedia()
 
   root.querySelectorAll<HTMLImageElement>('img[src]').forEach((img) => {
-    const rawSrc = img.getAttribute('src') || ''
+    const rawSrc = img.getAttribute('data-original-src') || img.getAttribute('src') || ''
     const mediaId = parseLocalMediaId(rawSrc)
     if (mediaId) {
       const media = localMediaMap[mediaId]

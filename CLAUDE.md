@@ -153,4 +153,6 @@
   1. 预览 hydration 能把相对路径映射到已授权目录中的文件
   2. 复制/export 链路也能把同一映射转成 data URL
   只修预览不修复制，或只修复制不修预览，都会出现“页面正常但粘贴失败”或“粘贴正常但预览失败”的不一致。
+- 目录授权模式下，除了持久化相对路径映射本身，还必须让 Preview 对 `relativeMediaMap` 的变化产生响应并重新 hydration；否则用户即使成功选了目录，也要手动刷新后才能看到图片，表现会像“功能没生效”。
+- 如果相对路径图片依赖后续 hydration 才能恢复，就必须保留原始 `src`（例如用 `data-original-src`）。否则浏览器会先按原始相对路径加载失败，`onerror` 立刻把 `src` 改成 fallback 图，后面的 hydration 就再也拿不到原始路径，目录授权映射也无法命中。
 - 普通 Markdown 图片的 `title` 不应默认变成可见图注；否则像 `![nms2.webp](nms2.webp "nms2.webp")` 这种写法会把文件名直接显示在图片下方，破坏预览和平台导出的阅读体验。只有显式 caption 才应生成 `figcaption`。

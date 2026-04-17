@@ -9,7 +9,7 @@ import { getCurrentAccent } from '@/utils/color-schemes'
 import { hydrateLocalMedia } from '@/utils/media'
 
 export function Preview() {
-  const { html, format, theme, colorSchemeId, customAccent, localMediaMap } = useStore()
+  const { html, format, theme, colorSchemeId, customAccent, localMediaMap, relativeMediaMap } = useStore()
   const containerRef = useRef<HTMLDivElement>(null)
   const isDark = theme === 'dark'
   const accent = getCurrentAccent(colorSchemeId, theme, customAccent)
@@ -44,7 +44,7 @@ export function Preview() {
       const root = createRoot(wrapper)
       root.render(<CodeBlock code={code} lang={lang} isDark={isDark} />)
     })
-  }, [html, format, isDark, accent, localMediaMap])
+  }, [html, format, isDark, accent, localMediaMap, relativeMediaMap])
 
   useEffect(() => {
     void renderContent()
