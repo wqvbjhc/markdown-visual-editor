@@ -1,5 +1,5 @@
-﻿import { inlineKatexStyles, type ExportMode } from './katex-inline'
-import { buildVideoPosterFallback, getVideoLink, getVideoPoster, getVideoTitle } from '@/utils/media'
+﻿import { inlineKatexStyles, type ExportMode } from './katex-inline.ts'
+import { buildVideoPosterFallback, getVideoLink, getVideoPoster, getVideoTitle } from '../utils/media.ts'
 
 function buildTagStyles(accent: string): Record<string, string> {
   return {
@@ -79,10 +79,9 @@ function normalizeOrderedLists(root: HTMLElement) {
     const start = Number.parseInt(list.getAttribute('start') || '1', 10)
     const listStart = Number.isNaN(start) ? 1 : start
     let current = listStart
-
-    ;(list as HTMLElement).style.listStyle = 'decimal'
-    ;(list as HTMLElement).style.listStyleType = 'decimal'
-    ;(list as HTMLElement).style.paddingLeft = '24px'
+    const wrapper = root.ownerDocument.createElement('div')
+    wrapper.setAttribute('style', 'margin:10px 0;')
+    wrapper.setAttribute('data-toutiao-ordered-list', 'true')
 
     Array.from(list.children).forEach((child) => {
       if (!(child instanceof HTMLElement) || child.tagName !== 'LI') return
@@ -90,11 +89,53 @@ function normalizeOrderedLists(root: HTMLElement) {
       const value = Number.parseInt(child.getAttribute('value') || '', 10)
       if (!Number.isNaN(value)) current = value
 
-      child.style.listStyle = 'decimal'
-      child.style.listStyleType = 'decimal'
-      child.setAttribute('data-export-ol-index', String(current))
+      const body = root.ownerDocument.createElement('div')
+      body.setAttribute('style', 'min-width:0;')
+      while (child.firstChild) {
+        body.appendChild(child.firstChild)
+      }
+
+      body.querySelectorAll('ul').forEach((nestedList) => {
+        const bulletWrapper = root.ownerDocument.createElement('div')
+        bulletWrapper.setAttribute('data-toutiao-bullet-list', 'true')
+        bulletWrapper.setAttribute('style', 'margin:8px 0 0 0;')
+
+        Array.from(nestedList.children).forEach((nestedChild) => {
+          if (!(nestedChild instanceof HTMLElement) || nestedChild.tagName !== 'LI') return
+
+          const row = root.ownerDocument.createElement('div')
+          row.setAttribute('style', 'margin:4px 0 4px 24px;line-height:1.9;color:#333;')
+          row.appendChild(root.ownerDocument.createTextNode('• '))
+          while (nestedChild.firstChild) {
+            row.appendChild(nestedChild.firstChild)
+          }
+          bulletWrapper.appendChild(row)
+        })
+
+        nestedList.replaceWith(bulletWrapper)
+      })
+
+      const row = root.ownerDocument.createElement('div')
+      row.setAttribute('style', 'margin:10px 0;')
+      row.setAttribute('data-export-ol-index', String(current))
+      row.setAttribute('data-toutiao-list-marker', `${current}.`)
+
+      const firstParagraph = body.querySelector(':scope > p') as HTMLElement | null
+      if (firstParagraph) {
+        firstParagraph.prepend(root.ownerDocument.createTextNode(`${current}. `))
+      } else {
+        row.appendChild(root.ownerDocument.createTextNode(`${current}. `))
+      }
+
+      while (body.firstChild) {
+        row.appendChild(body.firstChild)
+      }
+
+      wrapper.appendChild(row)
       current += 1
     })
+
+    list.replaceWith(wrapper)
   })
 }
 
