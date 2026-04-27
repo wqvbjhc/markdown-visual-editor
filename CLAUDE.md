@@ -115,6 +115,19 @@
 
 ---
 
+## 12. Cloudflare Pages 与包管理器规则
+本项目本地默认使用 `pnpm`，但 Cloudflare Pages 免费构建环境可能默认用 `npm clean-install`。
+
+**规则**：
+1. 如果项目通过 `preinstall` 强制限制包管理器（如 `only-allow pnpm`），必须同时考虑托管平台的默认安装器，否则会在“安装依赖阶段”直接失败，根本进不到构建阶段。
+2. 对 Cloudflare Pages 这类环境，应优先采用：
+   - Pages 环境中放行安装器检查
+   - 本地开发环境继续保留 `pnpm` 约束
+3. 不要把“Cloudflare 构建失败”先误判成 TypeScript/Vite 构建错误；先看日志是否停在依赖安装阶段。
+4. 如果日志里已经出现 `npm clean-install`，而项目又有 `only-allow pnpm`，根因通常就是包管理器冲突，不是业务代码错误。
+
+---
+
 ## 11. 复杂平台兼容问题的排错复盘规则
 这次头条嵌套列表问题之所以连续多次试错，根因不是单一实现失误，而是排错顺序错了。
 
