@@ -1,4 +1,4 @@
-﻿---
+---
 title: Markdown Visual Editor
 emoji: 📝
 colorFrom: indigo
