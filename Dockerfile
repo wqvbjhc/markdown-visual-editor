@@ -2,11 +2,11 @@
 
 FROM node:20-bookworm-slim AS builder
 WORKDIR /app
-RUN corepack enable
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+ENV CF_PAGES=1
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY . .
-RUN pnpm run build
+RUN npm run build
 
 FROM node:20-bookworm-slim AS runner
 RUN userdel -r node 2>/dev/null || true \
