@@ -1,4 +1,16 @@
-﻿# Markdown 可视化编辑器
+﻿---
+title: Markdown Visual Editor
+emoji: 📝
+colorFrom: indigo
+colorTo: pink
+sdk: docker
+app_port: 7860
+pinned: false
+license: mit
+short_description: Markdown 实时预览与多平台（公众号 / 头条号 / 移动端）格式导出工具
+---
+
+# Markdown 可视化编辑器
 
 一个基于 React + TypeScript 的两栏式 Markdown 实时预览编辑器。
 左侧编写 Markdown，右侧实时预览，支持 `默认 / 公众号 / 头条号 / Mobile` 四种格式，并支持复制格式化内容与按当前预览格式导出 PDF。
