@@ -1,5 +1,6 @@
 ﻿import { unified } from 'unified'
 import remarkParse from 'remark-parse'
+import remarkCjkFriendly from 'remark-cjk-friendly'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkBreaks from 'remark-breaks'
@@ -22,6 +23,7 @@ import { remarkMediaDirective } from './plugins/remark-media-directive'
 function createProcessor(enableDeAI: boolean) {
   const processor = unified()
     .use(remarkParse)
+    .use(remarkCjkFriendly)
     .use(remarkGfm)
     .use(remarkMath)
     .use(remarkBreaks)
