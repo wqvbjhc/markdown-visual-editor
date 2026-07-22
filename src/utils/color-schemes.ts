@@ -274,7 +274,7 @@ export function applyCustomColor(hex: string, theme: 'light' | 'dark') {
   const root = document.documentElement
   const hoverHex = darken(hex, 12)
   const softHex = theme === 'dark' ? darken(hex, 55) : lighten(hex, 86)
-  const contrastHex = theme === 'dark' ? '#f8fafc' : '#eff6ff'
+  const contrastHex = contrastColor(hex)
   root.style.setProperty('--accent', hex)
   root.style.setProperty('--accent-hover', hoverHex)
   root.style.setProperty('--accent-soft', softHex)
@@ -282,8 +282,10 @@ export function applyCustomColor(hex: string, theme: 'light' | 'dark') {
   root.style.setProperty('--link-color', theme === 'dark' ? lighten(hex, 18) : hoverHex)
 }
 
-function hexToRgb(hex: string) {
-  const h = hex.replace('#', '')
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  let h = hex.replace('#', '').trim()
+  if (/^[0-9a-f]{3}$/i.test(h)) h = h.split('').map((c) => c + c).join('')
+  if (!/^[0-9a-f]{6}$/i.test(h)) return null
   return { r: parseInt(h.substring(0, 2), 16), g: parseInt(h.substring(2, 4), 16), b: parseInt(h.substring(4, 6), 16) }
 }
 
@@ -292,15 +294,25 @@ function rgbToHex(r: number, g: number, b: number) {
 }
 
 function darken(hex: string, pct: number) {
-  const { r, g, b } = hexToRgb(hex)
+  const rgb = hexToRgb(hex)
+  if (!rgb) return hex
   const f = 1 - pct / 100
-  return rgbToHex(r * f, g * f, b * f)
+  return rgbToHex(rgb.r * f, rgb.g * f, rgb.b * f)
 }
 
 function lighten(hex: string, pct: number) {
-  const { r, g, b } = hexToRgb(hex)
+  const rgb = hexToRgb(hex)
+  if (!rgb) return hex
   const f = pct / 100
-  return rgbToHex(r + (255 - r) * f, g + (255 - g) * f, b + (255 - b) * f)
+  return rgbToHex(rgb.r + (255 - rgb.r) * f, rgb.g + (255 - rgb.g) * f, rgb.b + (255 - rgb.b) * f)
+}
+
+/** 按 accent 亮度派生对比文字色（亮底用深字、暗底用白字），避免白 accent 上白文字消失 */
+function contrastColor(hex: string): string {
+  const rgb = hexToRgb(hex)
+  if (!rgb) return '#ffffff'
+  const lum = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255
+  return lum > 0.55 ? '#111827' : '#ffffff'
 }
 
 export function getSchemeById(id: string): ColorScheme {

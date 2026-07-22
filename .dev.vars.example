@@ -1,0 +1,4 @@
+# 复制为 .dev.vars 填真值（.dev.vars 已 gitignore，不会提交）。
+# 凭证从 ~/.safegate/credentials.db 的 feishu/oauth_client 解密获取（见 memory feishu-app-credentials）。
+FEISHU_APP_ID="cli_xxx"
+FEISHU_APP_SECRET="xxx"

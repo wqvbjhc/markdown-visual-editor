@@ -3,6 +3,7 @@ import { FiImage, FiMoon, FiSun, FiVideo } from 'react-icons/fi'
 import { useStore, type FormatType } from '@/utils/store'
 import { applyWechatStyles } from '@/formats/wechat'
 import { applyToutiaoStyles } from '@/formats/toutiao'
+import { exportToFeishuDoc } from '@/feishu-blocks/export'
 import { colorSchemes, getCurrentAccent } from '@/utils/color-schemes'
 import { exportCurrentPreviewAsPdf } from '@/utils/pdf'
 import { buildImageDirective, buildVideoDirective } from '@/utils/media'
@@ -76,6 +77,7 @@ export function Toolbar() {
     theme,
     toggleTheme,
     html,
+    markdown,
     colorSchemeId,
     setColorScheme,
     customAccent,
@@ -89,6 +91,8 @@ export function Toolbar() {
   } = useStore()
   const [copyTip, setCopyTip] = useState('')
   const [pdfTip, setPdfTip] = useState('')
+  const [feishuTip, setFeishuTip] = useState('')
+  const [feishuBusy, setFeishuBusy] = useState(false)
   const [showPalette, setShowPalette] = useState(false)
   const [modalKind, setModalKind] = useState<InsertKind | null>(null)
 
@@ -166,13 +170,20 @@ export function Toolbar() {
 
       setRelativeMediaEntries(entries)
       setTransientTip(setCopyTip, entries.length > 0 ? `已载入 ${entries.length} 张本地图片` : '目录中未找到图片文件')
-    } catch {
-      setTransientTip(setCopyTip, '目录授权已取消')
+    } catch (e) {
+      const err = e as { name?: string; message?: string }
+      if (err?.name === 'AbortError') {
+        setTransientTip(setCopyTip, '目录授权已取消')
+      } else {
+        console.error('Pick image directory failed:', e)
+        setTransientTip(setCopyTip, `读取目录失败: ${err?.message || '未知错误'}`)
+      }
     }
   }
 
   const handleCopy = async () => {
     const accent = getCurrentAccent(colorSchemeId, theme, customAccent)
+
     const videoErrors = validateVideoExport(html, localMediaMap)
     if ((format === 'wechat' || format === 'toutiao') && videoErrors.length > 0) {
       setTransientTip(setCopyTip, '视频卡片需要封面和公开跳转链接')
@@ -224,6 +235,40 @@ export function Toolbar() {
     }
   }
 
+  // 飞书文档：md → block 树 → Worker 用 user token 建文档 + 塞块 → 开新窗。
+  // 首次未授权会自动跳飞书 OAuth；回来后 cookie 已种，再点一次。
+  const handleExportFeishu = async () => {
+    if (feishuBusy) return
+    setFeishuBusy(true)
+    setTransientTip(setFeishuTip, '生成中…')
+    // 同步预开 tab（user gesture 内），避免长异步（图 fetch + 飞书上传）后 window.open 被弹窗拦截
+    const popup = window.open('about:blank', '_blank')
+    try {
+      const result = await exportToFeishuDoc(markdown, { enableDeAI, localMediaMap })
+      if (result.need_auth) {
+        popup?.close()
+        setTransientTip(setFeishuTip, '跳转飞书授权…')
+        return
+      }
+      if (result.url && popup) {
+        popup.location.href = result.url
+      } else if (result.url) {
+        window.open(result.url, '_blank', 'noopener,noreferrer')
+      }
+      const warn = result.warnings && result.warnings.length > 0 ? `（${result.warnings.length} 项降级）` : ''
+      const imgErr = result.image_errors && result.image_errors.length > 0
+        ? `，${result.image_errors.length} 张图上传失败`
+        : ''
+      setTransientTip(setFeishuTip, `已创建飞书文档${warn}${imgErr}`)
+    } catch (error) {
+      popup?.close()
+      console.error('Feishu export failed:', error)
+      setTransientTip(setFeishuTip, error instanceof Error ? error.message : '飞书导出失败')
+    } finally {
+      setFeishuBusy(false)
+    }
+  }
+
   return (
     <>
       <div className="toolbar">
@@ -257,6 +302,14 @@ export function Toolbar() {
           </button>
           <button onClick={handleCopy} className="toolbar-btn" title="复制内容">
             {copyTip || '复制'}
+          </button>
+          <button
+            onClick={handleExportFeishu}
+            disabled={feishuBusy}
+            className="toolbar-btn"
+            title="把当前 Markdown 转成飞书云文档（原生结构 + 公式 + 图片）"
+          >
+            {feishuTip || '创建飞书文档'}
           </button>
           <button onClick={handleExportPdf} className="toolbar-btn" title="导出当前预览为 PDF">
             {pdfTip || '导出 PDF'}

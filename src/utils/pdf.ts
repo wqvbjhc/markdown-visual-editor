@@ -1,12 +1,5 @@
 ﻿import { type FormatType } from './store'
 
-const formatLabels: Record<FormatType, string> = {
-  default: 'default',
-  wechat: 'wechat',
-  toutiao: 'toutiao',
-  mobile: 'mobile',
-}
-
 const BASE_PRINT_CSS = `
   @page {
     size: auto;
@@ -80,7 +73,7 @@ function normalizeExportTree(clone: HTMLElement) {
 }
 
 function buildPrintableDocument(format: FormatType, previewHtml: string): string {
-  const title = `markdown-preview-${formatLabels[format]}-${new Date().toISOString().slice(0, 10)}`
+  const title = `markdown-preview-${format}-${new Date().toISOString().slice(0, 10)}`
 
   return `<!doctype html>
 <html lang="en">
@@ -140,6 +133,10 @@ export async function exportCurrentPreviewAsPdf(format: FormatType): Promise<voi
   })
 
   frameWindow.focus()
-  frameWindow.print()
-  cleanup()
+  try {
+    frameWindow.print()
+  } finally {
+    // print() 可能抛（沙箱/策略禁打印/弹窗拦截），finally 保证 iframe 清理不留残
+    cleanup()
+  }
 }

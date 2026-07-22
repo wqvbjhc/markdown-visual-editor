@@ -30,6 +30,8 @@ function replaceVideoNodes(root: HTMLElement, accent: string) {
 
   nodes.forEach((node) => {
     if (node instanceof HTMLElement && node.dataset.platformCard === 'true') return
+    // figure.media-video 内嵌的 <video> 由外层 figure 统一处理，跳过防重复/嵌套卡
+    if (node.tagName === 'VIDEO' && node.closest('figure.media-video')) return
 
     const title = getVideoTitle(node)
     const poster = getVideoPoster(node) || buildVideoPosterFallback(title)
@@ -165,7 +167,7 @@ export function applyToutiaoStyles(html: string, accent = '#e74c3c'): string {
     root.querySelectorAll(tag).forEach((el) => {
       const htmlEl = el as HTMLElement
       if (htmlEl.closest('.katex')) return
-      if (htmlEl.dataset.platformCard === 'true') return
+      if (htmlEl.closest('[data-platform-card="true"]')) return
       const existing = htmlEl.getAttribute('style') || ''
       htmlEl.setAttribute('style', existing + style)
     })

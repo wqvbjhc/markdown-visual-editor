@@ -71,32 +71,42 @@ function readRelativeMediaEntries(): Record<string, RelativeMediaEntry> {
   }
 }
 
-async function persistLocalMedia(record: LocalMediaRecord) {
+/** localStorage.setItem 容错：配额满/禁用时忽略持久化（会话状态仍更新，避免编辑器按键白屏） */
+function safeSetItem(key: string, value: string): void {
   if (typeof localStorage === 'undefined') return
-
   try {
-    const dataUrl = await blobToDataUrl(record.file)
-    const raw = localStorage.getItem(LOCAL_MEDIA_STORAGE_KEY)
-    const existing = raw ? JSON.parse(raw) as PersistedLocalMediaRecord[] : []
-    const next = [
-      ...existing.filter((item) => item.id !== record.id),
-      {
-        id: record.id,
-        kind: record.kind,
-        name: record.name,
-        type: record.type,
-        size: record.size,
-        dataUrl,
-      },
-    ]
-    localStorage.setItem(LOCAL_MEDIA_STORAGE_KEY, JSON.stringify(next))
+    localStorage.setItem(key, value)
   } catch {
-    // ignore persistence failures; in-session preview still works
+    // 持久化失败不阻塞会话
   }
 }
 
+// md-content 持久化 debounce timer：set 立即（预览响应），setItem trailing 防每按键同步写大文档阻塞主线程
+let mdPersistTimer: ReturnType<typeof setTimeout> | undefined
+
+// 串行化持久化：避免并发插入（快速连插两图）时 read-modify-write race 丢早记录
+let persistChain: Promise<void> = Promise.resolve()
+function persistLocalMedia(record: LocalMediaRecord): Promise<void> {
+  persistChain = persistChain.then(async () => {
+    if (typeof localStorage === 'undefined') return
+    try {
+      const dataUrl = await blobToDataUrl(record.file)
+      const raw = localStorage.getItem(LOCAL_MEDIA_STORAGE_KEY)
+      const existing = raw ? (JSON.parse(raw) as PersistedLocalMediaRecord[]) : []
+      const next = [
+        ...existing.filter((item) => item.id !== record.id),
+        { id: record.id, kind: record.kind, name: record.name, type: record.type, size: record.size, dataUrl },
+      ]
+      localStorage.setItem(LOCAL_MEDIA_STORAGE_KEY, JSON.stringify(next))
+    } catch {
+      // 持久化失败不阻塞会话
+    }
+  })
+  return persistChain
+}
+
 export const useStore = create<AppState>((set) => ({
-  markdown: savedMarkdown || sampleMarkdown,
+  markdown: savedMarkdown !== null ? savedMarkdown : sampleMarkdown,
   html: '',
   format: 'default',
   theme: savedTheme || 'light',
@@ -106,28 +116,29 @@ export const useStore = create<AppState>((set) => ({
   localMediaMap: {},
   relativeMediaMap: readRelativeMediaEntries(),
   setMarkdown: (md) => {
-    localStorage.setItem('md-content', md)
     set({ markdown: md })
+    clearTimeout(mdPersistTimer)
+    mdPersistTimer = setTimeout(() => safeSetItem('md-content', md), 400)
   },
   setHtml: (html) => set({ html }),
   setFormat: (f) => set({ format: f }),
   toggleTheme: () =>
     set((s) => {
       const next = s.theme === 'light' ? 'dark' : 'light'
-      localStorage.setItem('md-theme', next)
+      safeSetItem('md-theme', next)
       return { theme: next }
     }),
   setColorScheme: (id) => {
-    localStorage.setItem('md-color-scheme', id)
+    safeSetItem('md-color-scheme', id)
     set({ colorSchemeId: id })
   },
   setCustomAccent: (color) => {
-    localStorage.setItem('md-custom-accent', color)
+    safeSetItem('md-custom-accent', color)
     set({ customAccent: color, colorSchemeId: 'custom' })
-    localStorage.setItem('md-color-scheme', 'custom')
+    safeSetItem('md-color-scheme', 'custom')
   },
   setEnableDeAI: (enable) => {
-    localStorage.setItem('md-deai', String(enable))
+    safeSetItem('md-deai', String(enable))
     set({ enableDeAI: enable })
   },
   setEditorInsertHandler: (handler) => {
@@ -163,9 +174,7 @@ export const useStore = create<AppState>((set) => ({
     }
   },
   setRelativeMediaEntries: (entries) => {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(RELATIVE_MEDIA_STORAGE_KEY, JSON.stringify(entries))
-    }
+    safeSetItem(RELATIVE_MEDIA_STORAGE_KEY, JSON.stringify(entries))
     set({
       relativeMediaMap: Object.fromEntries(entries.map((entry) => [entry.path, entry])),
     })
