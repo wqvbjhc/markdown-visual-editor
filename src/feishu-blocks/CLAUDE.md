@@ -96,5 +96,11 @@ CF Workers / HF Spaces 都跑不了飞书后端（OAuth + 建文档代理），�
 - **诊断陷阱**：shell heredoc (`cat << EOF`) 会把 JS 源里的 `\\` 降级成 `\`，再被 JS 字符串解析吞掉反斜杠，制造「feishu.ts 丢反斜杠」假象。诊断公式必须用 **Write 工具写 `.md` 文件 + `readFileSync` 读**，绝不经 heredoc。
 - 回归守护：`tests/feishu-math-source.test.ts`（真实 `.md` 夹具 + jsdom polyfill `DOMParser`，断言 `\pi`/`\text{}`/`\times`/`\int`/`\sqrt` 反斜杠保留）。
 
+**嵌套列表公式（飞书粘贴硬限制）**：飞书粘贴引擎认扁平列表内公式，认嵌套列表**父项**公式，**不认嵌套列表子项**公式（code/span/裸文本三种包裹全废，经 A/B/C/D + I/J/K + v2 + v3 四轮探测确认；拍平 L 成）。真因不在 feishu.ts 产出（产出 HTML 正确：扁平与嵌套都是 `<code>$v$</code>` 在 `<li>` 内），在飞书粘贴解析嵌套子列表时的行为。**唯一出路：含公式的列表树拍平成单层**，padding-left 模拟原层级缩进（顶层 0、一层 22px、两层 44px…，对齐 ul 原 padding-left:22px）。纯文本列表（无公式）保持嵌套不动（用户选择，避免连带副作用）。
+- 实现：`flattenNestedListsWithFormulas`（feishu.ts，`replaceKatexWithLatex` 后调、TAG_STYLES 前）。DFS 遍历含公式列表，clone li → 移除内部嵌套列表 → 递归子列表 append 到扁平数组（保序）→ 重建单层 ul/ol。
+- **避坑**：clone 后残留空白文本节点（li 末尾多空行）需手动删（递归 childNodes 删空 Text）；**不用 `createTreeWalker`/`NodeFilter`**——node 测试环境无 `NodeFilter` 全局，浏览器有，用了测试崩。
+- 判断列表含公式：`list.querySelectorAll('code')` 任一 `/^\$/`（公式 code 文本以 $ 开头，与 `replaceKatexWithLatex` 产物一致）。
+- 回归守护：`tests/feishu-flatten-nested.test.ts`（含公式列表拍平成单层 + 所有公式 code 在顶层 li 直系 + 子项 padding-left 缩进；纯文本列表保持 2 层嵌套）。
+
 ## 历史复盘（不每次加载）
 复制路径退役（feishu.ts 删除）、PNG 渲染证伪、code-review bug 修复（14.13/14.14/18/18.1）叙事见 `docs/postmortems.md`。
