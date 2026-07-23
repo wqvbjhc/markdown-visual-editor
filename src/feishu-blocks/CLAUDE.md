@@ -86,5 +86,9 @@ CF Workers / HF Spaces 都跑不了飞书后端（OAuth + 建文档代理），�
 
 **图片粘贴**：飞书不支持，公网图保留 src 碰运气，本地图/相对图转占位提示，复制后给「N 张图需手动插入」warning。
 
+**公式源码可靠性（踩过假 bug）**：从 `.katex` 的 `<annotation encoding="application/x-tex">` 取原始 LaTeX **可靠**（含 `\pi` / `\text{}` / `\times` / `\int` 等反斜杠命令完整保留）。mdast `inlineMath/math` 节点 `.value` 同样可靠。
+- **诊断陷阱**：shell heredoc (`cat << EOF`) 会把 JS 源里的 `\\` 降级成 `\`，再被 JS 字符串解析吞掉反斜杠，制造「feishu.ts 丢反斜杠」假象。诊断公式必须用 **Write 工具写 `.md` 文件 + `readFileSync` 读**，绝不经 heredoc。
+- 回归守护：`tests/feishu-math-source.test.ts`（真实 `.md` 夹具 + jsdom polyfill `DOMParser`，断言 `\pi`/`\text{}`/`\times`/`\int`/`\sqrt` 反斜杠保留）。
+
 ## 历史复盘（不每次加载）
 复制路径退役（feishu.ts 删除）、PNG 渲染证伪、code-review bug 修复（14.13/14.14/18/18.1）叙事见 `docs/postmortems.md`。
