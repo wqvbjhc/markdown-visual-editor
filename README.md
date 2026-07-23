@@ -332,62 +332,29 @@ graph TD
 
 ## 项目结构
 
+按职责分层（不列单个文件，避免随增删失效；具体文件见仓库 `src/`）：
+
 ```text
-V:\AICollab\markdown-visual-editor\
-├── index.html
-├── package.json
-├── vite.config.ts
+markdown-visual-editor/
+├── index.html              # 入口
+├── vite.config.ts          # Vite + @cloudflare/vite-plugin
 ├── wrangler.jsonc          # Cloudflare Workers 配置
-├── Dockerfile              # Hugging Face Spaces 部署
-├── .dev.vars.example       # 飞书 app_id/secret 本地配置样例（.dev.vars 实际 gitignored）
-├── tsconfig.json
-├── tsconfig.app.json
-├── tsconfig.node.json
-├── public/
-│   ├── favicon.svg
-│   └── icons.svg
+├── Dockerfile              # HF Spaces 部署
 └── src/
-    ├── main.tsx
+    ├── main.tsx            # 前端入口
     ├── App.tsx
-    ├── worker.ts            # Cloudflare Worker：飞书 OAuth + 文档创建代理
-    ├── index.css
-    ├── assets/
-    ├── components/
-    │   ├── Editor.tsx
-    │   ├── Preview.tsx
-    │   ├── Toolbar.tsx
-    │   ├── TOC.tsx
-    │   ├── CodeBlock.tsx
-    │   ├── MermaidBlock.tsx
-    │   └── MediaInsertModal.tsx
-    ├── pipeline/
-    │   ├── processor.ts
-    │   └── plugins/
-    │       ├── rehype-image.ts
-    │       ├── rehype-mermaid.ts
-    │       ├── rehype-table-wrap.ts
-    │       ├── rehype-video.ts
-    │       ├── remark-deai.ts
-    │       └── remark-media-directive.ts
-    ├── formats/
-    │   ├── katex-inline.ts
-    │   ├── wechat.ts
-    │   └── toutiao.ts
-    ├── feishu-blocks/
-    │   ├── converter.ts     # mdast → 飞书 docx block
-    │   ├── export.ts        # 浏览器侧编排：fetch 图字节 + mermaid PNG + OAuth refresh
-    │   └── types.ts
-    ├── themes/
-    │   └── variables.css
-    └── utils/
-        ├── color-schemes.ts
-        ├── media.ts
-        ├── media-export.ts
-        ├── pdf.ts
-        ├── sample.ts
-        ├── sanitize-schema.ts
-        └── store.ts
+    ├── worker.ts           # Cloudflare Worker：飞书 OAuth + 文档创建代理
+    ├── components/         # UI 组件（编辑器 / 预览 / 工具栏 / 代码块 / Mermaid / 媒体插入 …）
+    ├── pipeline/           # Markdown 处理链
+    │   ├── processor.ts    #   unified pipeline 装配
+    │   └── plugins/        #   自定义 remark/rehype 插件（图片 / Mermaid / 视频 / 表格 / 去 AI 味 …）
+    ├── formats/            # 复制链路：各目标平台样式归一化（公众号 / 头条号 / 飞书 / KaTeX 行内）
+    ├── feishu-blocks/      # 飞书建文档链路：mdast → docx block + 浏览器编排（converter / export / types）
+    ├── themes/             # 主题 CSS 变量
+    └── utils/              # 工具（状态 store / 媒体 / 复制导出 / PDF / 配色 / mermaid→PNG / sanitize 白名单 …）
 ```
+
+分层对应职责：**解析层**（pipeline）→ **预览层**（components）→ **复制链路**（formats）→ **导出链路**（utils/pdf、feishu-blocks）→ **平台兼容层**（formats + feishu-blocks）。改代码先定层，见 `CLAUDE.md`「分层排查规则」。
 
 ---
 
