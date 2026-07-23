@@ -77,7 +77,14 @@
 ## 测试
 - 行为测试带 ESM loader：`node --experimental-loader ./tests/_esm-resolve.mjs --test tests/feishu-block-converter.test.ts`（loader 解析 src 无扩展名相对导入 + `@/` 别名）。
 - converter 侧可测（mermaid/image block + images 清单 + equation + todo children + title heading + list.start warning）。
-- `feishu-format-registered.test.ts` 反向守护（FormatType / formats 数组 / formatLabels 不得含 feishu，防误加回）。
+- `feishu-format-registered.test.ts` 正向守护飞书「复制粘贴」格式（FormatType 含 feishu、formats 数组含飞书、handleCopy 调 applyFeishuStyles、公式走 LaTeX 源码非 MathML）。
+
+## 飞书「复制粘贴」路径（CF/HF 无后端时的主路径）
+CF Workers / HF Spaces 都跑不了飞书后端（OAuth + 建文档代理），「创建飞书文档」按钮仅在 Workers 环境显示（前端探测 `/api/feishu/status` 200 才渲染）。其余环境走 `src/formats/feishu.ts` 格式化 + 「复制」按钮，粘进飞书文档。
+
+**公式粘贴结论（MVP 探测确认，勿推翻）**：飞书文档粘贴**认 LaTeX 源码** `$...$` / `\(...\)`（dollar + paren 均生效，行内/块级均如此），**不认 MathML**（粘贴成纯文本）。故 `feishu.ts` 从 `.katex` 的 `<annotation encoding="application/x-tex">` 取原始 LaTeX → 行内 `$tex$`、块级 `$$\ntex\n$$`。**不能**调 `inlineKatexStyles`（那是把公式转近似 Unicode 文本，方向相反），**不能**用 MathML（飞书不解析）。
+
+**图片粘贴**：飞书不支持，公网图保留 src 碰运气，本地图/相对图转占位提示，复制后给「N 张图需手动插入」warning。
 
 ## 历史复盘（不每次加载）
 复制路径退役（feishu.ts 删除）、PNG 渲染证伪、code-review bug 修复（14.13/14.14/18/18.1）叙事见 `docs/postmortems.md`。

@@ -1,8 +1,9 @@
-﻿import { useState } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { FiImage, FiMoon, FiSun, FiVideo } from 'react-icons/fi'
 import { useStore, type FormatType } from '@/utils/store'
 import { applyWechatStyles } from '@/formats/wechat'
 import { applyToutiaoStyles } from '@/formats/toutiao'
+import { applyFeishuStyles, countFeishuImagePlaceholders } from '@/formats/feishu'
 import { exportToFeishuDoc } from '@/feishu-blocks/export'
 import { colorSchemes, getCurrentAccent } from '@/utils/color-schemes'
 import { exportCurrentPreviewAsPdf } from '@/utils/pdf'
@@ -14,6 +15,7 @@ const formats: { value: FormatType; label: string }[] = [
   { value: 'default', label: '默认' },
   { value: 'wechat', label: '公众号' },
   { value: 'toutiao', label: '头条号' },
+  { value: 'feishu', label: '飞书' },
   { value: 'mobile', label: 'Mobile' },
 ]
 
@@ -93,6 +95,23 @@ export function Toolbar() {
   const [pdfTip, setPdfTip] = useState('')
   const [feishuTip, setFeishuTip] = useState('')
   const [feishuBusy, setFeishuBusy] = useState(false)
+  // 创建飞书文档按钮需 Workers 后端（/api/feishu/*）。纯静态部署（HF / 静态站）无后端 → 隐藏按钮。
+  // 探测 /api/feishu/status：返 200 = Worker 在；返 404/异常 = 无后端，隐藏。
+  const [feishuBackendAvailable, setFeishuBackendAvailable] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/feishu/status', { headers: { Accept: 'application/json' } })
+      .then((res) => {
+        if (cancelled) return
+        setFeishuBackendAvailable(res.ok)
+      })
+      .catch(() => {
+        if (!cancelled) setFeishuBackendAvailable(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
   const [showPalette, setShowPalette] = useState(false)
   const [modalKind, setModalKind] = useState<InsertKind | null>(null)
 
@@ -194,6 +213,10 @@ export function Toolbar() {
     let content = html
     if (format === 'wechat') content = applyWechatStyles(html, accent)
     else if (format === 'toutiao') content = applyToutiaoStyles(html, accent)
+    else if (format === 'feishu') content = applyFeishuStyles(html)
+
+    // 飞书格式：图片占位数（本地图/相对图转了占位，提示用户手动插）
+    const feishuImagePlaceholders = format === 'feishu' ? countFeishuImagePlaceholders(content) : 0
 
     try {
       const prepared = await prepareClipboardHtml(content, localMediaMap)
@@ -206,7 +229,15 @@ export function Toolbar() {
       }
 
       await navigator.clipboard.write([new ClipboardItem(itemData)])
-      setTransientTip(setCopyTip, prepared.warnings[0] || '已复制')
+      // 飞书格式不依赖剪贴板图片项（占位提示为主），单独凑提示
+      if (format === 'feishu') {
+        const tip = feishuImagePlaceholders > 0
+          ? `已复制（飞书公式用 LaTeX 源码，${feishuImagePlaceholders} 张图需手动插入）`
+          : '已复制（粘到飞书文档，公式自动识别）'
+        setTransientTip(setCopyTip, tip)
+      } else {
+        setTransientTip(setCopyTip, prepared.warnings[0] || '已复制')
+      }
     } catch (error) {
       console.error('Copy failed:', error)
       const el = document.querySelector('.prose-container')
@@ -303,14 +334,16 @@ export function Toolbar() {
           <button onClick={handleCopy} className="toolbar-btn" title="复制内容">
             {copyTip || '复制'}
           </button>
-          <button
-            onClick={handleExportFeishu}
-            disabled={feishuBusy}
-            className="toolbar-btn"
-            title="把当前 Markdown 转成飞书云文档（原生结构 + 公式 + 图片）"
-          >
-            {feishuTip || '创建飞书文档'}
-          </button>
+          {feishuBackendAvailable && (
+            <button
+              onClick={handleExportFeishu}
+              disabled={feishuBusy}
+              className="toolbar-btn"
+              title="把当前 Markdown 转成飞书云文档（原生结构 + 公式 + 图片）。仅 Workers 环境可用"
+            >
+              {feishuTip || '创建飞书文档'}
+            </button>
+          )}
           <button onClick={handleExportPdf} className="toolbar-btn" title="导出当前预览为 PDF">
             {pdfTip || '导出 PDF'}
           </button>

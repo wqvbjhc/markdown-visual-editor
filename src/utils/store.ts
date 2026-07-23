@@ -3,7 +3,7 @@ import { sampleMarkdown } from './sample'
 import type { LocalMediaKind, LocalMediaRecord, PersistedLocalMediaRecord, RelativeMediaEntry } from './media'
 import { blobToDataUrl, buildLocalMediaSrc, LOCAL_MEDIA_STORAGE_KEY, RELATIVE_MEDIA_STORAGE_KEY } from './media'
 
-export type FormatType = 'default' | 'wechat' | 'toutiao' | 'mobile'
+export type FormatType = 'default' | 'wechat' | 'toutiao' | 'mobile' | 'feishu'
 export type ThemeType = 'light' | 'dark'
 
 export interface InsertResult {

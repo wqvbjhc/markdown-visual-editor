@@ -1,17 +1,24 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 
-// 飞书已从「格式选择器」移除：建文档按钮常驻工具栏右侧（不依赖 format），
-// 复制路径（text/plain）随之退役。本测试反向守护，防止飞书格式被误加回。
+// 飞书「复制粘贴」格式已加回 FormatType（CF/HF 无后端，改走复制路径）。
+// 本测试正向守护：飞书格式必须存在、复制分支必须处理、公式必须走 LaTeX 源码（非 MathML/近似文本）。
 const storeSrc = readFileSync(new URL('../src/utils/store.ts', import.meta.url), 'utf8')
-assert.doesNotMatch(storeSrc, /FormatType = [^;]*'feishu'/, "FormatType 不应再含 'feishu'（飞书格式已移除）")
+assert.match(storeSrc, /'default' \| 'wechat' \| 'toutiao' \| 'mobile' \| 'feishu'/, "FormatType 必须含 'feishu'")
 
 const toolbarSrc = readFileSync(new URL('../src/components/Toolbar.tsx', import.meta.url), 'utf8')
-assert.doesNotMatch(toolbarSrc, /value: 'feishu'/, 'formats 数组不应再含飞书选项')
-// 「创建飞书文档」按钮必须常驻（不挂 format === \'feishu\' 条件）
-assert.match(toolbarSrc, /创建飞书文档/, '建文档按钮文案必须存在')
+assert.match(toolbarSrc, /value: 'feishu'/, 'formats 数组必须有飞书选项')
+assert.match(toolbarSrc, /applyFeishuStyles/, 'handleCopy 必须调 applyFeishuStyles')
+// 「创建飞书文档」按钮必须受环境检测保护（纯静态部署隐藏）
+assert.match(toolbarSrc, /feishuBackendAvailable/, '创建飞书文档按钮必须按后端探测结果条件渲染')
 
-const pdfSrc = readFileSync(new URL('../src/utils/pdf.ts', import.meta.url), 'utf8')
-assert.doesNotMatch(pdfSrc, /feishu:/, 'pdf formatLabels 不应再含 feishu，否则 Record<FormatType,string> 类型不满足')
+// 飞书格式化文件本身
+const feishuSrc = readFileSync(new URL('../src/formats/feishu.ts', import.meta.url), 'utf8')
+// 公式：LaTeX 源码（dollar）。MVP 探测确认飞书认 $...$ 源码，不认 MathML。
+assert.match(feishuSrc, /annotation\[encoding="application\/x-tex"\]/, '必须从 KaTeX annotation 取原始 LaTeX')
+assert.match(feishuSrc, /\$\$\$\{tex\}\$\$|`\$\$\\n\$\{tex\}\\n\$\$`/, '块级公式必须输出 $$...$$ 源码')
+assert.doesNotMatch(feishuSrc, /inlineKatexStyles\s*\(/, '飞书公式不能调 inlineKatexStyles(...)（那是转近似文本，方向相反）')
+assert.doesNotMatch(feishuSrc, /import.*inlineKatexStyles/, '不能 import inlineKatexStyles')
+assert.doesNotMatch(feishuSrc, /\.katex-mathml|<math[> ]/, '飞书公式不能走 MathML（探测确认 C 纯文本，飞书不认）')
 
-console.log('feishu format removed ok')
+console.log('feishu format registered ok')

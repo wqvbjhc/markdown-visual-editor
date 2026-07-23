@@ -29,6 +29,7 @@ React 19 + TypeScript + Vite 8 + CodeMirror 6 + unified/remark/rehype + Shiki + 
 - 改依赖不同步两份 lockfile（`pnpm-lock.yaml` + `package-lock.json`）。
 - 行为测试不带 ESM loader（`--experimental-loader`，**非** `--import`）。
 - 飞书本地开发用非 5173 端口（OAuth redirect_uri mismatch）。
+- 飞书复制路径公式用 MathML 或近似文本（飞书只认 LaTeX 源码 `$...$`，见 `@src/feishu-blocks/CLAUDE.md`）。
 
 **ALWAYS**：
 - 显示异常先分层（数据 / DOM / 布局 / 样式），未定层前不改实现。
