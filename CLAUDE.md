@@ -90,3 +90,8 @@ React 19 + TypeScript + Vite 8 + CodeMirror 6 + unified/remark/rehype + Shiki + 
 4. HF 初始化 Space 自带 commit（默认 README + LFS `.gitattributes`），首 push rejected → 先 `git fetch hf main` + `git merge hf/main --allow-unrelated-histories`。冲突：README 保本地，`.gitattributes` 本地规则在前再追加 HF LFS。
 5. 「网页打不开但 Logs 显 Accepting connections」通常是网络层（GFW 对 `*.hf.space` TLS 不稳），先换网络/代理，别先怀疑容器。
 6. 双 lockfile 同步（见上「包管理器」）。
+7. **`@cloudflare/vite-plugin` 改变产物布局**：`vite build` 后产物**不**在 `dist/` 根，而是 `dist/client/`（SPA）+ `dist/markdown_visual_editor/`（Worker bundle）。Dockerfile 若 `COPY dist ./dist` 再 `serve -s dist`，因 `dist/index.html` 不存在（只在 `dist/client/`）→ `serve` 回退成**目录列表**（列 `client/` 和 `markdown_visual_editor/` 两文件夹）。
+   - **本地能跑是假象**：本地 `dist/` 残留旧构建（无 cloudflare 插件时产物在根），根下还存旧 `index.html`；HF 是干净 `npm ci` + 全新 build，只产 `dist/client/`，根为空 → 才暴露。
+   - **诊断法**：build 后查 `ls dist/index.html` 是否存在；只信干净构建（`rm -rf dist && npm run build`）的产物布局，别信累积 `dist/`。
+   - **修法**：HF 不跑 Worker（飞书不可用），Dockerfile 只取 `dist/client`：`COPY --from=builder /app/dist/client ./dist`，`serve -s dist` 才命中 `index.html`。
+   - **通用规则**：`@cloudflare/vite-plugin` 启用后，任何「拷 `dist/` 再伺服」的部署（Dockerfile / 静态服务器）都要确认产物根是 `dist/` 还是 `dist/client/`，别假设根有 `index.html`。
