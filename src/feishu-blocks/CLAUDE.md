@@ -42,12 +42,20 @@
 - equation 是 ParagraphElement，与 text_run 同级，可同块混排。
 - **不**降级为 `$...$` 文本（飞书显字面量不渲染）。
 
-## Mermaid PNG（建文档路径）
+## Mermaid PNG（建文档路径 + 复制路径共享 util）
+- 渲染逻辑在 `src/utils/mermaid-png.ts`（`renderMermaidToDataUrl`），**两条路径共用**：建文档（export.ts 包成 worker payload）+ 复制到公众号/头条/飞书（media-export.ts `injectMermaidPngs` 注 `<img>`）。
 - converter `emitCode` mermaid 分支：产空 image block + `images.push({block_id, src:'', kind:'mermaid', mermaidCode})}`。
-- export.ts `renderMermaidPng`：`mermaid.render` → SVG → canvas **2x scale + 白底填充** → PNG base64。
-- 渲染依赖 DOM，只能浏览器跑；node 测试不覆盖 `renderMermaidPng`，仅 converter 侧可测。
+- export.ts `renderMermaidPng`（薄封装）：`renderMermaidToDataUrl` → 剥 `data:image/png;base64,` 前缀 → worker payload。
+- 渲染依赖 DOM，只能浏览器跑；node 测试不覆盖渲染，仅源码正则守护配置（`tests/mermaid-png.test.ts`）+ converter 侧可测。
 - cleanup：mermaid v10+ 临时 svg 用 `id` 自身（v9 用 `d{id}`），两者都清防 DOM 残留。
 - Worker 不感知 mermaid（统一当 image 上传，3 步链路不变）。
+
+### tainted canvas 硬限制（mermaid v11，踩坑确认）
+`mermaid.render` 产的 SVG 经 `<img>` 画 canvas → `toDataURL` **必抛 `SecurityError: Tainted canvases may not be exported`**，PNG 出不来。根因：mermaid v11 默认 `look:'neo'` + `htmlLabels:true` → 标签渲进 `<foreignObject>`（HTML 层）；HTML 规范规定 SVG 含 `<foreignObject>` 经 image 画到 canvas **必 tainted**，无解。
+- **修（三要素缺一复发）**：`mermaid.initialize` 设 `look:'classic'`（原生 SVG `<text>`，去 foreignObject）+ **顶层** `htmlLabels:false`（v11 主键）+ `flowchart.useMaxWidth:false`（默认 `width="100%"` 被 `<img>` 用默认小尺寸压扁图）。
+- **顶层 vs flowchart**：`getEffectiveHtmlLabels` 源码 `evaluate(config.htmlLabels ?? config.flowchart?.htmlLabels ?? true)`，`flowchart.htmlLabels` 已 deprecated 仅 fallback——**实测单设 `flowchart.htmlLabels:false` 不够**（foreignObject 仍在），必须设顶层 `htmlLabels:false`。
+- **NEVER 缓存「已 init」标志**：mermaid 是单例，Preview 的 `MermaidBlock` 每次渲染都 `mermaid.initialize` 重置回默认 neo look。导出/复制若缓存 `mermaidReady` 只首次设配置，后续被 Preview 污染后 neo look 回来 → tainted 复发。`ensureMermaidExportConfig` 每次 render 前强制重设。
+- **复制路径同根因**：预览里 SVG 只挂预览 DOM，**不在 `store.html` 串**（`processMarkdown` 产 `<div class="mermaid-block">裸文本</div>`，React `MermaidBlock` 客户端渲 SVG 只进预览）。复制拿 `html` 串 = 裸文本。公众号/头条/飞书粘贴又必丢 SVG（公众号白名单过滤 `<script>`/`<style>`/AttributeName，头条更严；PNG base64 三平台均认）。故复制前 `injectMermaidPngs` 就地渲 PNG 替换 div。
 
 ## 其他转换器要点
 - 临时 block_id 用 `crypto.randomUUID()`（非 secure context fallback：`b-{ts36}-{rand}`）。

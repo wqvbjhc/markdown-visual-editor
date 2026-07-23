@@ -1,12 +1,49 @@
 import { normalizeCodeBlockText } from '@/components/CodeBlock'
 import type { LocalMediaRecord } from './media'
 import { blobToDataUrl, buildMissingMediaSvg, getVideoLink, normalizeRelativeMediaPath, parseLocalMediaId, readPersistedRelativeMedia } from './media'
+import { renderMermaidToDataUrl } from './mermaid-png'
 
 export interface CopyPreparationResult {
   html: string
   text: string
   imageItem?: { type: string; blob: Blob }
   warnings: string[]
+}
+
+/**
+ * 把 html 里的 mermaid 代码块（<div class="mermaid-block">）渲染成 PNG data URL <img>。
+ *
+ * 复制到公众号/头条/飞书必须走 PNG：SVG 粘贴被公众号白名单过滤（禁 <script>/<style>、AttributeName
+ * 白名单）必丢，头条更严；PNG base64 粘贴公众号/头条自动转存、飞书认。预览里的 mermaid SVG 只活在
+ * 预览 DOM 不在 store.html 串，复制拿串是裸文本，故复制前必须就地渲 PNG 替换。
+ *
+ * 渲染失败的块保留原样（裸文本），failed 计数供调用方提示。
+ */
+export async function injectMermaidPngs(html: string): Promise<{ html: string; failed: number }> {
+  if (!html.includes('mermaid-block')) return { html, failed: 0 }
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html')
+  const root = doc.body.firstElementChild as HTMLElement | null
+  if (!root) return { html, failed: 0 }
+  const blocks = Array.from(root.querySelectorAll<HTMLElement>('.mermaid-block'))
+  if (blocks.length === 0) return { html, failed: 0 }
+  let failed = 0
+  await Promise.all(
+    blocks.map(async (block) => {
+      const code = block.getAttribute('data-mermaid') || block.textContent || ''
+      const dataUrl = await renderMermaidToDataUrl(code)
+      if (!dataUrl) {
+        failed += 1
+        return
+      }
+      const img = doc.createElement('img')
+      img.setAttribute('src', dataUrl)
+      img.setAttribute('alt', 'mermaid 图表')
+      img.setAttribute('style', 'max-width:100%;height:auto;border-radius:4px;margin:8px 0;')
+      block.replaceWith(img)
+    }),
+  )
+  return { html: root.innerHTML, failed }
 }
 
 function isPublicHref(value: string): boolean {
