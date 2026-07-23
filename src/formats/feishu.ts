@@ -152,10 +152,12 @@ function listContainsFormula(list: HTMLElement): boolean {
  */
 function flattenNestedListsWithFormulas(root: HTMLElement): void {
   // 顶层列表：直接父不是 li（不在别的列表项里的才是树根）
-  const topLists = Array.from(root.querySelectorAll('ul, ol')).filter((list) => {
-    const parent = list.parentElement
-    return !parent || parent.tagName !== 'LI'
-  })
+  const topLists = Array.from(root.querySelectorAll('ul, ol')).filter(
+    (list): list is HTMLElement => {
+      const parent = list.parentElement
+      return !parent || parent.tagName !== 'LI'
+    },
+  )
 
   for (const list of topLists) {
     if (!listContainsFormula(list)) continue
