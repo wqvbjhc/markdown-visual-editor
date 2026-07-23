@@ -11,6 +11,9 @@ assert.match(toolbarSrc, /value: 'feishu'/, 'formats 数组必须有飞书选项
 assert.match(toolbarSrc, /applyFeishuStyles/, 'handleCopy 必须调 applyFeishuStyles')
 // 「创建飞书文档」按钮必须受环境检测保护（纯静态部署隐藏）
 assert.match(toolbarSrc, /feishuBackendAvailable/, '创建飞书文档按钮必须按后端探测结果条件渲染')
+// 后端探测必须验 Content-Type，不能只判 res.ok：HF `serve -s dist` 的 SPA rewrite
+// 对 /api/* 未匹配路径 fallback 到 index.html 仍返 200（text/html），会伪装成后端在线。
+assert.match(toolbarSrc, /content-type/, '后端探测必须校验响应 Content-Type 含 application/json，区分 SPA fallback 假 200')
 
 // 飞书格式化文件本身
 const feishuSrc = readFileSync(new URL('../src/formats/feishu.ts', import.meta.url), 'utf8')
