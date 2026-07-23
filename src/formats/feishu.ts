@@ -132,12 +132,85 @@ function neutralizeVideos(root: HTMLElement): void {
   })
 }
 
+/** 列表（含后代）是否含公式 code（feishu 产，文本以 $ 开头） */
+function listContainsFormula(list: HTMLElement): boolean {
+  return Array.from(list.querySelectorAll('code')).some((c) =>
+    /^\$/.test(c.textContent || ''),
+  )
+}
+
+/**
+ * 拍平含公式的嵌套列表。
+ *
+ * 飞书粘贴引擎**不认嵌套列表子项**里的公式（父项认；子项无论 code/span/裸文本都废，
+ * 经 A/B/C/D + I/J/K 探测确认）。唯一出路：把含公式的列表树拍平成单层列表，
+ * 用 li 的 padding-left 模拟原层级缩进。
+ *
+ * 纯文本列表（无公式）保持嵌套不动——只动含公式的分支（用户选择）。
+ *
+ * 深度 → padding-left：顶层 0，一层 22px，两层 44px…（对齐 ul 原始 padding-left:22px）
+ */
+function flattenNestedListsWithFormulas(root: HTMLElement): void {
+  // 顶层列表：直接父不是 li（不在别的列表项里的才是树根）
+  const topLists = Array.from(root.querySelectorAll('ul, ol')).filter((list) => {
+    const parent = list.parentElement
+    return !parent || parent.tagName !== 'LI'
+  })
+
+  for (const list of topLists) {
+    if (!listContainsFormula(list)) continue
+    const tag = list.tagName.toLowerCase()
+    const flatItems: HTMLElement[] = []
+
+    const collect = (ul: HTMLElement, depth: number) => {
+      for (const li of Array.from(ul.children) as HTMLElement[]) {
+        if (li.tagName !== 'LI') continue
+        // 克隆 li 并移除其内部嵌套列表（保留公式 code 与文字）
+        const clone = li.cloneNode(true) as HTMLElement
+        clone.querySelectorAll('ul, ol').forEach((nested) => nested.remove())
+        // 移除嵌套列表移除后残留的空白文本节点（避免 li 末尾多空行）
+        // 不用 TreeWalker/NodeFilter（node 测试环境无 NodeFilter 全局），直接递归 childNodes
+        const stripBlankText = (el: HTMLElement) => {
+          Array.from(el.childNodes)
+            .filter((n): n is Text => n.nodeType === 3 && (!n.textContent || !n.textContent.trim()))
+            .forEach((n) => el.removeChild(n))
+          el.querySelectorAll('*').forEach((child) => {
+            const htmlEl = child as HTMLElement
+            Array.from(htmlEl.childNodes)
+              .filter((n): n is Text => n.nodeType === 3 && (!n.textContent || !n.textContent.trim()))
+              .forEach((n) => htmlEl.removeChild(n))
+          })
+        }
+        stripBlankText(clone)
+        const indent = depth * 22
+        const existing = clone.getAttribute('style') || ''
+        clone.setAttribute('style', `${existing}padding-left:${indent}px;`)
+        flatItems.push(clone)
+        // 递归原 li 的直接嵌套列表（按出现顺序，DFS 保序）
+        const nestedLists = Array.from(
+          li.querySelectorAll(':scope > ul, :scope > ol'),
+        ) as HTMLElement[]
+        for (const nested of nestedLists) {
+          collect(nested, depth + 1)
+        }
+      }
+    }
+
+    collect(list as HTMLElement, 0)
+
+    const flat = root.ownerDocument.createElement(tag)
+    flatItems.forEach((li) => flat.appendChild(li))
+    list.replaceWith(flat)
+  }
+}
+
 export function applyFeishuStyles(html: string): string {
   const parser = new DOMParser()
   const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html')
   const root = doc.body.firstElementChild as HTMLElement
 
   replaceKatexWithLatex(root)
+  flattenNestedListsWithFormulas(root)
   unwrapHeadingLinks(root)
   neutralizeVideos(root)
   const replacedImages = neutralizeImages(root)
