@@ -3,9 +3,11 @@ import { buildVideoPosterFallback, getVideoLink, getVideoPoster, getVideoTitle }
 
 function buildTagStyles(accent: string): Record<string, string> {
   return {
-    h1: `font-size:24px;font-weight:bold;color:#222;margin:28px 0 16px;`,
-    h2: `font-size:20px;font-weight:bold;color:#222;margin:24px 0 12px;border-bottom:1px solid #eee;padding-bottom:8px;`,
-    h3: 'font-size:18px;font-weight:bold;color:#333;margin:20px 0 8px;',
+    // 标题 color 用 accent：rehype-autolink-headings 把标题文本包进 <a>，复制链路已剥 <a>，
+    // 标题文字不再经 <a> 的 link 色显色 → 显式给 accent 补回（对齐预览）。
+    h1: `font-size:24px;font-weight:bold;color:${accent};margin:28px 0 16px;`,
+    h2: `font-size:20px;font-weight:bold;color:${accent};margin:24px 0 12px;border-bottom:1px solid #eee;padding-bottom:8px;`,
+    h3: `font-size:18px;font-weight:bold;color:${accent};margin:20px 0 8px;`,
     p: 'font-size:16px;line-height:1.9;color:#333;margin:10px 0;text-align:justify;',
     blockquote: `border-left:3px solid ${accent};padding:12px 16px;margin:16px 0;background:#fdf6f6;color:#666;font-size:15px;`,
     pre: 'background:#282c34;border-radius:6px;padding:16px;overflow-x:auto;font-size:14px;line-height:1.5;margin:16px 0;color:#abb2bf;',

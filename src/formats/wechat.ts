@@ -3,10 +3,13 @@ import { buildVideoPosterFallback, getVideoLink, getVideoPoster, getVideoTitle }
 
 function buildTagStyles(accent: string): Record<string, string> {
   return {
-    h1: `font-size:22px;font-weight:bold;color:#1a1a1a;margin:24px 0 16px;border-bottom:2px solid ${accent};padding-bottom:8px;`,
-    h2: `font-size:20px;font-weight:bold;color:#1a1a1a;margin:20px 0 12px;border-left:4px solid ${accent};padding-left:10px;`,
-    h3: 'font-size:18px;font-weight:bold;color:#1a1a1a;margin:16px 0 8px;',
-    h4: 'font-size:16px;font-weight:bold;color:#333;margin:12px 0 8px;',
+    // 标题 color 用 accent：rehype-autolink-headings 把标题文本包进 <a>，复制链路已剥 <a>，
+    // 标题文字不再经 <a> 的 link 色显色 → 显式给 accent 补回（对齐预览：预览标题经 .prose-container a
+    // 的 link-color 显色）。不靠 incidental 的 <a> 样式。
+    h1: `font-size:22px;font-weight:bold;color:${accent};margin:24px 0 16px;border-bottom:2px solid ${accent};padding-bottom:8px;`,
+    h2: `font-size:20px;font-weight:bold;color:${accent};margin:20px 0 12px;border-left:4px solid ${accent};padding-left:10px;`,
+    h3: `font-size:18px;font-weight:bold;color:${accent};margin:16px 0 8px;`,
+    h4: `font-size:16px;font-weight:bold;color:${accent};margin:12px 0 8px;`,
     p: 'font-size:15px;line-height:1.8;color:#333;margin:8px 0;letter-spacing:0.5px;',
     blockquote: `border-left:4px solid ${accent};padding:12px 16px;margin:16px 0;background:#f6f6f6;color:#666;font-size:14px;`,
     pre: 'background:#f6f8fa;border-radius:4px;padding:16px;overflow-x:auto;font-size:13px;line-height:1.6;margin:12px 0;',

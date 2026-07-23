@@ -94,7 +94,9 @@ CF Workers / HF Spaces 都跑不了飞书后端（OAuth + 建文档代理），�
 
 **标题里的公式**（飞书标题不支持公式识别）：`.katex` 若在 `h1-6` 内，不取 LaTeX 源码（会显示 `$...$` 字面量），改降级为 `.katex-html` 的 textContent（KaTeX 视觉纯文本，如 `E=mc2`、`π`；分式等复杂结构会塌平）。判断：`katex.closest('h1,h2,h3,h4,h5,h6')`。
 
-**标题超链接**：rehype-autolink-headings (`behavior:'wrap'`) 把标题整段包在 `<a href="#自锚">`，飞书粘贴会把标题变超链接。`unwrapHeadingLinks` 用 `<a>` 子节点替换 `<a>` 本身（仅去 `#` 开头的自锚，外链保留）。
+**标题超链接**：rehype-autolink-headings (`behavior:'wrap'`) 把标题整段包在 `<a href="#自锚">`，离开本页是死链，复制到任何平台都变无意义超链接。剥除逻辑在共享 util `src/utils/heading-links.ts` 的 `unwrapSelfAnchorHeadingLinks(root)`（用 `<a>` 子节点替换 `<a>` 本身，仅去 `#` 开头自锚，外链保留）。**单点接入 `prepareClipboardHtml`**（`src/utils/media-export.ts`，全格式复制必经，复用已 parse 的 root 零额外开销）——覆盖公众号/头条/飞书/默认/Mobile 全部格式，**不在各 format 函数里重复剥**（早期 feishu.ts 内联 `unwrapHeadingLinks` 已删去重）。预览保留自锚（点标题跳锚点导航 / permalink），只复制链路剥。回归：`tests/heading-links.test.ts`。
+
+**剥 `<a>` 的连带坑（标题失色）**：预览里 `.prose-container a{color:var(--link-color)}`，autolink `<a>` 包标题 → 预览标题显 link 色。剥 `<a>` 后标题文字落到 `<h1>` 自身色（wechat 原 `#1a1a1a`、toutiao 原 `#222`）→ 复制出去标题变深灰失色。修：`wechat.ts`/`toutiao.ts` `buildTagStyles` 显式给 h1-h4 `color:${accent}` 补回（不靠 incidental 的 `<a>` link 样式）。回归：`tests/heading-color.test.ts`。
 
 **公式 code 不能带样式（隐蔽坑）**：飞书把带 `background`/`color` 样式的 `<code>` 当**字面代码块**，不触发 LaTeX 公式识别 → 公式变纯文本。故 feishu.ts 所有公式 code（文本以 `$` 开头）**一律跳过** TAG_STYLES.code 样式，**不靠 parent 判断**（早期版本只跳 `parentElement===P` 的，漏了公式套在 `<strong>`/`<em>`/`<a>` 内联标签里的情况——加粗/斜体里的公式仍带样式 → 飞书不识别）。判断公式 code 只看自身文本 `/^\$/`，不看 parent。
 

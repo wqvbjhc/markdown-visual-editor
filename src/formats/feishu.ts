@@ -78,26 +78,6 @@ function replaceKatexWithLatex(root: HTMLElement): void {
 }
 
 /**
- * 去掉标题里的超链接包裹。
- * rehype-autolink-headings (behavior:wrap) 把整个标题文本包在 <a href="#锚点"> 里，
- * 飞书粘贴会把标题变成超链接（点标题跳锚点，无意义且干扰）。unwrap：用 <a> 子节点替换 <a> 本身。
- */
-function unwrapHeadingLinks(root: HTMLElement): void {
-  root.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach((h) => {
-    h.querySelectorAll('a').forEach((a) => {
-      const anchor = a as HTMLAnchorElement
-      // 仅去掉标题内的锚点链接（href 以 # 开头的自锚）；外链保留（标题里外链罕见但不动）
-      const href = anchor.getAttribute('href') || ''
-      if (!href.startsWith('#')) return
-      const parent = anchor.parentElement
-      if (!parent) return
-      while (anchor.firstChild) parent.insertBefore(anchor.firstChild, anchor)
-      anchor.remove()
-    })
-  })
-}
-
-/**
  * 图片：飞书粘贴不支持图片导入。
  * 公网图（http/https/data）保留 src（粘贴碰运气，部分飞书版本可能加载）；
  * 本地图（local-media://）/相对路径 → 占位文本（防坏图标，复制时另给警告计数）。
@@ -213,7 +193,6 @@ export function applyFeishuStyles(html: string): string {
 
   replaceKatexWithLatex(root)
   flattenNestedListsWithFormulas(root)
-  unwrapHeadingLinks(root)
   neutralizeVideos(root)
   const replacedImages = neutralizeImages(root)
 
