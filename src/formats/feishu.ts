@@ -145,8 +145,10 @@ export function applyFeishuStyles(html: string): string {
   for (const [tag, style] of Object.entries(TAG_STYLES)) {
     root.querySelectorAll(tag).forEach((el) => {
       const htmlEl = el as HTMLElement
-      // code 已用于包公式源码，公式 code 不叠加代码块底色（否则 LaTeX 源码被染色，飞书可能不识别）
-      if (tag === 'code' && htmlEl.parentElement?.tagName === 'P' && /^\$/.test(htmlEl.textContent || '')) return
+      // 公式 code（feishu 产，文本以 $ 开头）不叠加代码块底色：飞书把带代码样式的 <code>
+      // 当字面代码块，不触发 LaTeX 公式识别。无论 code 套在 <strong>/<em>/<a> 还是裸在 <p>，
+      // 只要是公式源码就跳过样式。
+      if (tag === 'code' && /^\$/.test(htmlEl.textContent || '')) return
       const existing = htmlEl.getAttribute('style') || ''
       htmlEl.setAttribute('style', existing + style)
     })

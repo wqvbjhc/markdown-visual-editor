@@ -46,4 +46,19 @@ headings.forEach((h) => {
   assert.ok(!anchor, `标题内不应保留自锚点超链接，got: ${h.innerHTML}`)
 })
 
+// 公式 code（正文里的 $...$）必须不带代码块样式：飞书把带 background 的 <code> 当字面代码，
+// 不触发 LaTeX 公式识别（含在 <strong>/<em> 等内联标签里的公式同样必须裸 code）。
+// 用含加粗公式的独立 md 验证（夹具正文无加粗公式，这里补）。
+const mdBold = '正文 **$E=mc^2$** 加粗公式'
+const htmlBold = await processMarkdown(mdBold, false)
+const outBold = applyFeishuStyles(htmlBold)
+const domBold = new JSDOM(outBold)
+const formulaCodes = domBold.window.document.querySelectorAll('code')
+formulaCodes.forEach((c) => {
+  const txt = c.textContent || ''
+  if (!txt.startsWith('$')) return
+  const style = c.getAttribute('style') || ''
+  assert.ok(!/background:\s*#/.test(style), `公式 code 不应带 background 样式（飞书会当代码字面量），got: ${c.outerHTML}`)
+})
+
 console.log('feishu formula source preserved ok')

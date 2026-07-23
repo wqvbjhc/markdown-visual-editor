@@ -88,6 +88,8 @@ CF Workers / HF Spaces 都跑不了飞书后端（OAuth + 建文档代理），�
 
 **标题超链接**：rehype-autolink-headings (`behavior:'wrap'`) 把标题整段包在 `<a href="#自锚">`，飞书粘贴会把标题变超链接。`unwrapHeadingLinks` 用 `<a>` 子节点替换 `<a>` 本身（仅去 `#` 开头的自锚，外链保留）。
 
+**公式 code 不能带样式（隐蔽坑）**：飞书把带 `background`/`color` 样式的 `<code>` 当**字面代码块**，不触发 LaTeX 公式识别 → 公式变纯文本。故 feishu.ts 所有公式 code（文本以 `$` 开头）**一律跳过** TAG_STYLES.code 样式，**不靠 parent 判断**（早期版本只跳 `parentElement===P` 的，漏了公式套在 `<strong>`/`<em>`/`<a>` 内联标签里的情况——加粗/斜体里的公式仍带样式 → 飞书不识别）。判断公式 code 只看自身文本 `/^\$/`，不看 parent。
+
 **图片粘贴**：飞书不支持，公网图保留 src 碰运气，本地图/相对图转占位提示，复制后给「N 张图需手动插入」warning。
 
 **公式源码可靠性（踩过假 bug）**：从 `.katex` 的 `<annotation encoding="application/x-tex">` 取原始 LaTeX **可靠**（含 `\pi` / `\text{}` / `\times` / `\int` 等反斜杠命令完整保留）。mdast `inlineMath/math` 节点 `.value` 同样可靠。
