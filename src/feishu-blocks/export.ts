@@ -15,7 +15,6 @@
  *  - https:/data:/blob: → 原样 fetch（公网图可能被 CORS 挡，挡则跳过 + warning）
  */
 
-import mermaid from 'mermaid'
 import { convertMarkdownToFeishu } from './converter'
 import {
   parseLocalMediaId,
@@ -23,6 +22,7 @@ import {
   blobToDataUrl,
   type LocalMediaRecord,
 } from '@/utils/media'
+import { renderMermaidToDataUrl } from '@/utils/mermaid-png'
 
 /** 送 Worker 的单张图（base64 字节） */
 export interface ImageUploadPayload {
@@ -88,80 +88,19 @@ async function fetchImageBase64(url: string): Promise<Omit<ImageUploadPayload, '
 }
 
 let mermaidRenderCounter = 0
-let mermaidReady = false
-function ensureMermaid(): void {
-  if (mermaidReady) return
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: 'default',
-    securityLevel: 'loose',
-    fontFamily: 'system-ui, sans-serif',
-  })
-  mermaidReady = true
-}
 
-/** SVG string → PNG data URL（canvas 2x 绘制，白底防透明）。优先显式 width/height，缺失从 viewBox 推，避免 mermaid 无宽高 SVG 被默认 300x150 压扁。 */
-function svgToPngDataUrl(svg: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const wMatch = /\swidth=["']?(\d+(?:\.\d+)?)/i.exec(svg)
-    const hMatch = /\sheight=["']?(\d+(?:\.\d+)?)/i.exec(svg)
-    let w = wMatch ? Number(wMatch[1]) : 0
-    let h = hMatch ? Number(hMatch[1]) : 0
-    if (!w || !h) {
-      const vb = /viewBox=["']?\s*[\d.\-]+\s+[\d.\-]+\s+([\d.]+)\s+([\d.]+)/i.exec(svg)
-      if (vb) { w = w || Number(vb[1]); h = h || Number(vb[2]) }
-    }
-    if (!w || !h) { w = 800; h = 600 }
-    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const img = new Image()
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas')
-        canvas.width = w * 2
-        canvas.height = h * 2
-        const ctx = canvas.getContext('2d')
-        if (!ctx) throw new Error('no 2d ctx')
-        ctx.fillStyle = '#fff'
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
-        ctx.scale(2, 2)
-        ctx.drawImage(img, 0, 0, w, h)
-        resolve(canvas.toDataURL('image/png'))
-      } catch (e) {
-        reject(e)
-      } finally {
-        URL.revokeObjectURL(url)
-      }
-    }
-    img.onerror = () => {
-      URL.revokeObjectURL(url)
-      reject(new Error('svg to png load fail'))
-    }
-    img.src = url
-  })
-}
-
-/** mermaid 源码 → PNG base64（送 Worker 上传）。渲染或转 PNG 失败返 null。 */
+/** mermaid 源码 → PNG base64 payload（送 Worker 上传）。渲染或转 PNG 失败返 null。 */
 async function renderMermaidPng(
   code: string,
 ): Promise<Omit<ImageUploadPayload, 'block_id'> | null> {
-  try {
-    ensureMermaid()
-    const id = `feishu-m-${++mermaidRenderCounter}`
-    const { svg } = await mermaid.render(id, code.trim())
-    // mermaid v10+ 临时 svg 用 id 自身；v9 用 d{id}。两者都清，防 DOM 残留
-    document.getElementById(id)?.remove()
-    document.getElementById(`d${id}`)?.remove()
-    const dataUrl = await svgToPngDataUrl(svg)
-    const commaIdx = dataUrl.indexOf(',')
-    if (commaIdx < 0) return null
-    return {
-      file_name: `${id}.png`,
-      mime: 'image/png',
-      data_base64: dataUrl.slice(commaIdx + 1),
-    }
-  } catch {
-    return null
+  const dataUrl = await renderMermaidToDataUrl(code)
+  if (!dataUrl) return null
+  const commaIdx = dataUrl.indexOf(',')
+  if (commaIdx < 0) return null
+  return {
+    file_name: `feishu-m-${++mermaidRenderCounter}.png`,
+    mime: 'image/png',
+    data_base64: dataUrl.slice(commaIdx + 1),
   }
 }
 

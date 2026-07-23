@@ -8,7 +8,7 @@ import { exportToFeishuDoc } from '@/feishu-blocks/export'
 import { colorSchemes, getCurrentAccent } from '@/utils/color-schemes'
 import { exportCurrentPreviewAsPdf } from '@/utils/pdf'
 import { buildImageDirective, buildVideoDirective } from '@/utils/media'
-import { prepareClipboardHtml, validateVideoExport } from '@/utils/media-export'
+import { prepareClipboardHtml, validateVideoExport, injectMermaidPngs } from '@/utils/media-export'
 import { MediaInsertModal } from './MediaInsertModal'
 
 const formats: { value: FormatType; label: string }[] = [
@@ -218,6 +218,14 @@ export function Toolbar() {
     if (format === 'wechat') content = applyWechatStyles(html, accent)
     else if (format === 'toutiao') content = applyToutiaoStyles(html, accent)
     else if (format === 'feishu') content = applyFeishuStyles(html)
+
+    // mermaid 代码块 → PNG data URL <img>：预览里 SVG 只挂预览 DOM 不在 html 串，
+    // 公众号/头条/飞书粘贴又必丢 SVG，故复制前就地渲 PNG 替换（PNG base64 三平台均认）。
+    if (content.includes('mermaid-block')) {
+      const injected = await injectMermaidPngs(content)
+      content = injected.html
+      if (injected.failed > 0) console.warn(`Mermaid 渲染失败 ${injected.failed} 个，已保留原文本`)
+    }
 
     // 飞书格式：图片占位数（本地图/相对图转了占位，提示用户手动插）
     const feishuImagePlaceholders = format === 'feishu' ? countFeishuImagePlaceholders(content) : 0

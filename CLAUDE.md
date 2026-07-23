@@ -30,6 +30,7 @@ React 19 + TypeScript + Vite 8 + CodeMirror 6 + unified/remark/rehype + Shiki + 
 - 行为测试不带 ESM loader（`--experimental-loader`，**非** `--import`）。
 - 飞书本地开发用非 5173 端口（OAuth redirect_uri mismatch）。
 - 飞书复制路径公式用 MathML 或近似文本（飞书只认 LaTeX 源码 `$...$`，见 `@src/feishu-blocks/CLAUDE.md`）。
+- 用默认 mermaid 配置渲 PNG（v11 默认 `look:'neo'`+`htmlLabels:true` 产 `<foreignObject>`，SVG 经 `<img>` 画 canvas 必 tainted；复制拿 `store.html` 串实为裸文本不是图）。渲 PNG 须设顶层 `htmlLabels:false`+`look:'classic'`+`useMaxWidth:false` 且不缓存「已 init」（单例被 Preview 反复重置），见 `@src/feishu-blocks/CLAUDE.md`「tainted canvas」。
 
 **ALWAYS**：
 - 显示异常先分层（数据 / DOM / 布局 / 样式），未定层前不改实现。
