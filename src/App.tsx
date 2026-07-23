@@ -9,6 +9,7 @@ import { applyColorScheme, applyCustomColor, getSchemeById } from '@/utils/color
 export default function App() {
   const { markdown, setHtml, theme, colorSchemeId, customAccent, enableDeAI } = useStore()
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const seqRef = useRef(0)
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -21,8 +22,11 @@ export default function App() {
   }, [theme, colorSchemeId, customAccent])
 
   const renderMarkdown = useCallback(async (md: string, deAI: boolean) => {
+    const seq = ++seqRef.current
     try {
       const html = await processMarkdown(md, deAI)
+      // 旧 render 后 resolve 时 newer 已抢，弃结果防 stale html 覆盖新内容
+      if (seq !== seqRef.current) return
       setHtml(html)
     } catch (e) {
       console.error('Markdown processing error:', e)

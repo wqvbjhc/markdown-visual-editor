@@ -27,8 +27,6 @@ export function rehypeVideo() {
         controls: true,
         playsInline: true,
         preload: node.properties.preload || 'metadata',
-        crossOrigin: 'anonymous',
-        referrerPolicy: 'no-referrer',
         title,
         'data-media-link': href,
       }

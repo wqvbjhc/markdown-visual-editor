@@ -13,6 +13,13 @@ function textNode(value: string) {
   return { type: 'text', value }
 }
 
+/** directive bracket 文本：`::image[alt]{}` 的 alt 在 children（非 attributes），attrs.alt 只覆盖 ::image{alt=} 形式 */
+function directiveText(node: DirectiveNode): string {
+  const children = (node as unknown as { children?: Array<{ value?: string }> }).children
+  if (!Array.isArray(children)) return ''
+  return children.map((c) => c.value || '').join('').trim()
+}
+
 function parseHtmlAttributes(value: string): Record<string, string> {
   const attrs: Record<string, string> = {}
   const attrRe = /([:\w-]+)(?:=(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g
@@ -50,7 +57,7 @@ function createFigure(node: DirectiveNode) {
 
   if (node.name === 'image') {
     const src = attrs.src || ''
-    const alt = attrs.alt || ''
+    const alt = attrs.alt || directiveText(node)
     const title = attrs.title || ''
     const caption = attrs.caption || title
     const width = attrs.width || ''

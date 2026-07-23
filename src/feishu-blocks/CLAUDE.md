@@ -1,0 +1,83 @@
+# 飞书文档模块规则
+
+> 飞书任务时加载本文件。项目总规则见根 `CLAUDE.md`。
+
+## 模块结构
+- `src/feishu-blocks/converter.ts`：mdast → 飞书 docx block（跑浏览器，复用 remark parse pipeline，Worker 不背 remark 依赖）
+- `src/feishu-blocks/export.ts`：浏览器编排（fetch 图字节 / mermaid 渲染 PNG / OAuth refresh 重试）
+- `src/feishu-blocks/types.ts`：飞书 block 极简类型
+- `src/worker.ts`：Cloudflare Worker（OAuth + 建文档代理，用户身份 token）
+
+## 两条路径
+- **建文档路径**（converter + worker）：block 原生结构（标题/列表/代码/表格/equation 公式/图片上传/Mermaid PNG）。**当前唯一飞书路径**。
+- **复制路径**（`text/plain` 粘到已有飞书文档）**已退役删除**（原因：建文档是功能超集，两入口易混）。要恢复需重建 `src/formats/feishu.ts`。
+
+## 硬规则
+- **NEVER** 给飞书 block 注 `text_color`（飞书 docx 是预设枚举 int，heading 块不接受；强加触发 `99992402 field validation failed`）。文档走飞书原生标题层级色，accent 仅预览/公众号/头条。
+- **ALWAYS** 本地开发用 `pnpm dev`（5173 端口），与飞书后台 redirect_uri 一致。不用 `pnpm preview`（8787，OAuth mismatch）。
+- **ALWAYS** 1000 块上限检查在 `createDocument` **之前**（否则超限返 413 但空文档已建，留孤儿）。
+- **ALWAYS** 飞书 `res.json()` 走 `readJson`（非 JSON 响应容错，防 SyntaxError「Unexpected token <」掩盖 HTTP 状态）。
+- **ALWAYS** `bindImages` 失败包 try（仍返 url，文档已建 media 已传，用户能找到）。
+- **NEVER** 把 math/mermaid mdast 节点转 text 节点（remark-stringify 转义 `$`/`_` 致公式废）。
+- **NEVER** multipart 手设 `Content-Type`（FormData 自动带 boundary，手设破坏分隔符）。
+
+## 颜色限制
+飞书 docx `text_element_style.text_color` 是 **预设枚举 int**（调色板索引），非任意 hex/RGB/string。heading 块（block_type 3-11）不接受 text_color。
+- `color:"2563EB"`（string）→ 忽略，文字黑
+- `text_color:2452459`（int RGB）/ `text_color:"2563EB"`（string）→ 均 `99992402`
+
+文档走飞书原生层级色。若以后重试上色：先建带色文档调 `GET /docx/v1/documents/{id}/blocks/{id}` 反查飞书存的 `text_element_style` 真实结构 + 枚举表（飞书 JS 文档是 SPA，reader 拿不到字段定义）。
+
+## 图片 3 步链路（不能预上传到文档根）
+1. **descendant 建空 image block**：converter 产 `{block_type:27, image:{}}`。响应 `data.block_id_relations` 结构是 **`{index: {block_id(真实), temporary_block_id(临时)}}`**——不是扁平 `{临时:真实}`。必须 `Object.values` 展平成 `{temporary_block_id: block_id}`。不展平 → `relations[临时uuid]` 永远 undefined → upload_all 根本不跑 → 飞书页空图框「图片上传失败」。
+2. **upload_all**：`POST /drive/v1/medias/upload_all`（multipart），`parent_type=docx_image`、`parent_node=真实 block_id`、`size`、`file`。返回 `data.file_token`。单文件 ≤ 20MB。
+3. **batch_update 绑回**：`PATCH /docx/v1/documents/{id}/blocks/batch_update`，`{requests:[{block_id:真实id, replace_image:{token:file_token}}]}`。
+
+权限：零新 scope（`drive:drive` + `docx:document` 覆盖 upload_all + batch_update）。
+
+浏览器侧（export.ts）：converter 返 `images:[{block_id, src, kind?, mermaidCode?}]`；浏览器 fetch/渲染成 base64 随请求送 Worker；`local-media://id` → objectUrl 或 persisted dataUrl；公网图 CORS 挡则跳过 + warning。`readPersistedLocalMedia` 提到循环外算一次（O(N)）。单张失败不阻断整篇。
+
+## 公式 equation element
+- inlineMath `$E=mc^2$` / 块级 `$$x^2$$` → `{equation:{content}}`，content 是 LaTeX **不带 `$` delimiters**（mdast `.value` 已剥）。
+- equation 是 ParagraphElement，与 text_run 同级，可同块混排。
+- **不**降级为 `$...$` 文本（飞书显字面量不渲染）。
+
+## Mermaid PNG（建文档路径）
+- converter `emitCode` mermaid 分支：产空 image block + `images.push({block_id, src:'', kind:'mermaid', mermaidCode})}`。
+- export.ts `renderMermaidPng`：`mermaid.render` → SVG → canvas **2x scale + 白底填充** → PNG base64。
+- 渲染依赖 DOM，只能浏览器跑；node 测试不覆盖 `renderMermaidPng`，仅 converter 侧可测。
+- cleanup：mermaid v10+ 临时 svg 用 `id` 自身（v9 用 `d{id}`），两者都清防 DOM 残留。
+- Worker 不感知 mermaid（统一当 image 上传，3 步链路不变）。
+
+## 其他转换器要点
+- 临时 block_id 用 `crypto.randomUUID()`（非 secure context fallback：`b-{ts36}-{rand}`）。
+- heading 动态 key（heading1..9）：`(block as unknown as Record<string, unknown>)[...]` 赋值（TS 不允许 string key 直接索引 FeishuBlock）。
+- `remark-parse` code 节点 `.value` **无尾随换行**（测试断言别带 `\n`）。
+- `emitTodoItem` 首段作正文，rest 段落/嵌套列表 push 到 children（与 emitListItem 一致，不 break 丢内容）。
+- 段落内 inline image 降级 alt + warning（飞书 image 是 block 级，独占段落的图才上传）。
+- `::video` 指令不支持导出到飞书（显式 warning）。
+- `emitList` 检 `List.start`（飞书 ordered 从 1 自动编号，非 1 起始给 warning）。
+- title 取首个 heading（非首个产 id 节点），`clipTitle` 按 Unicode 码点截 100（防 emoji 代理对中间截断产孤立 surrogate）。
+- `new Blob([uint8])` TS 报错：cast `new Blob([bytes as unknown as ArrayBuffer], {type})`（TS lib Uint8Array 泛型与 BlobPart 不兼容，运行时无碍）。
+
+## 本地开发端口
+- `pnpm dev`（= vite + `@cloudflare/vite-plugin`）：5173，前端 + worker 同端口。
+- 飞书后台 redirect_uri = `http://localhost:5173/api/feishu/oauth/callback`，**必须 5173**。
+- 不用 `pnpm preview` / 裸 `wrangler dev`（默认 8787，OAuth redirect_uri mismatch）。非要用 wrangler dev 加 `--port 5173`。
+- cookie 过期或换端口后旧 cookie 失效，重新走 `http://localhost:5173/api/feishu/oauth/start`。
+- `.dev.vars` 配 `FEISHU_APP_ID` / `FEISHU_APP_SECRET`（参考 `.dev.vars.example`，gitignored）。
+
+## OAuth
+- 用户身份 token（scope `docx:document drive:drive`），HttpOnly cookie（`feishu_token` + `feishu_refresh`）。
+- access token ~2h，过期前端先 POST `/api/feishu/oauth/refresh` 用 refresh_token 静默续期 + 重试 export，refresh 也失效才跳完整 OAuth。
+- `handleExport` catch 区分 auth 过期 code（`/code=9999166\d/`）→ 返 `need_auth`，前端跳 re-OAuth。
+- `handleOAuthCallback` 整体 try/catch（token 交换失败重定向回首页带错误，避免用户卡 /callback，auth code 已消费）。
+- `getCookie` decodeURIComponent 容错（非法 % 序列当原文，防攻击者构造 cookie 抛 URIError 做 DoS）。
+
+## 测试
+- 行为测试带 ESM loader：`node --experimental-loader ./tests/_esm-resolve.mjs --test tests/feishu-block-converter.test.ts`（loader 解析 src 无扩展名相对导入 + `@/` 别名）。
+- converter 侧可测（mermaid/image block + images 清单 + equation + todo children + title heading + list.start warning）。
+- `feishu-format-registered.test.ts` 反向守护（FormatType / formats 数组 / formatLabels 不得含 feishu，防误加回）。
+
+## 历史复盘（不每次加载）
+复制路径退役（feishu.ts 删除）、PNG 渲染证伪、code-review bug 修复（14.13/14.14/18/18.1）叙事见 `docs/postmortems.md`。

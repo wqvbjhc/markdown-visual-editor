@@ -26,6 +26,9 @@ export function MermaidBlock({ code, isDark }: { code: string; isDark: boolean }
 
     mermaid.render(id, code.trim()).then(
       ({ svg: rendered }) => {
+        // mermaid v10+ 临时测量 svg 用 id 自身；v9 用 d{id}。两者都清防 DOM 残留
+        document.getElementById(id)?.remove()
+        document.getElementById('d' + id)?.remove()
         if (!cancelled) { setSvg(rendered); setError(null) }
       },
       (err) => {
@@ -33,8 +36,8 @@ export function MermaidBlock({ code, isDark }: { code: string; isDark: boolean }
           setError(String(err?.message || err))
           setSvg('')
         }
-        const el = document.getElementById('d' + id)
-        el?.remove()
+        document.getElementById(id)?.remove()
+        document.getElementById('d' + id)?.remove()
       },
     )
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { codeToHtml } from 'shiki'
 
 interface Props {
@@ -27,14 +27,20 @@ export function CodeBlock({ code, lang, isDark }: Props) {
       theme: isDark ? 'github-dark' : 'github-light',
     })
       .then((result) => { if (!cancelled) setHtml(result) })
-      .catch(() => { if (!cancelled) setHtml(`<pre><code>${escapeHtml(normalizedCode)}</code></pre>`) })
+      .catch((e) => { console.warn('Shiki highlight failed:', e); if (!cancelled) setHtml(`<pre><code>${escapeHtml(normalizedCode)}</code></pre>`) })
     return () => { cancelled = true }
   }, [normalizedCode, lang, isDark])
 
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(normalizedCode)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(normalizedCode)
+      setCopied(true)
+      clearTimeout(copiedTimerRef.current)
+      copiedTimerRef.current = setTimeout(() => setCopied(false), 2000)
+    } catch (e) {
+      console.error('Code copy failed:', e)
+    }
   }
 
   const lines = getCodeBlockLines(normalizedCode)

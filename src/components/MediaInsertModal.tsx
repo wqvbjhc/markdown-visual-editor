@@ -114,6 +114,9 @@ export function MediaInsertModal({ kind, open, onClose, onSubmit }: MediaInsertM
         })
       }
       onClose()
+    } catch (e) {
+      console.error('Media insert failed:', e)
+      // 不调 onClose：modal 留开让用户可重试或看 console 诊断，避免 onSubmit reject 静默吞
     } finally {
       setIsSubmitting(false)
     }

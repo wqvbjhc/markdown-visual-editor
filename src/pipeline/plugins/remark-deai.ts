@@ -23,7 +23,7 @@ const aiDict = [
   // 3. AI 最爱的四字成语/高级动词（大词小用）
   { pattern: /深入探讨/g, replacement: '聊聊' },
   { pattern: /深入挖掘/g, replacement: '仔细看看' },
-  { pattern: /释放.*的潜力/g, replacement: '发挥作用' },
+  { pattern: /释放[^。！？\n]{0,15}的潜力/g, replacement: '发挥作用' },
   { pattern: /赋能/g, replacement: '帮助' },
   { pattern: /无缝衔接/g, replacement: '连着' },
   { pattern: /至关重要/g, replacement: '很重要' },
@@ -37,7 +37,7 @@ const aiDict = [
   
   // 进阶打断句式
   // 把太长的逗号连接句，强行改成两个短句
-  { pattern: /，同时(，)?/g, replacement: '。而且$1' },
+  // 注：原「，同时」规则删除——CJK 无词边界，会误匹配「同时代/同时期/同时刻」等复合词致乱码
   // 打破 AI 喜欢用的“不仅...还...”
   { pattern: /不仅(.*?)(，|而且)还(.*?)(。)/g, replacement: '$1。这也导致了$3。' },
 ]

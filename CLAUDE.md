@@ -1,237 +1,92 @@
 # markdown-visual-editor 项目协作规则
 
-## 0. 项目定位
-- 这是一个 Markdown 格式转换网站，主要处理预览、格式转换、复制、导出与内容样式兼容问题。
-- 处理问题时，要明确区分：解析层、预览层、复制链路、导出链路、平台兼容层。
-- 当本项目发生错误并修复完成后，要把错误原因、修复经验和防止再次犯错的规则整理进本文件，而不是只保留在临时会话里。
+> **子文件**（按需加载）：飞书模块 `@src/feishu-blocks/CLAUDE.md`、平台规则 `@docs/platform-rules.md`、复盘与 changelog `@docs/postmortems.md`。
+> **维护规则**：错误修复后把「规则」进本文件（不停临时会话）；「叙事复盘 / bug 修复流水」进 `docs/postmortems.md`。
 
-## 1. 排查代码块 / 富文本显示异常时，先分层，不要直接改代码
-遇到“多一行 / 多一块空白 / 对齐异常 / 某侧正常某侧异常”时，先区分问题属于哪一层：
+## 项目定位
+Markdown 格式转换网站，处理预览 / 格式转换 / 复制 / 导出 / 平台兼容。明确分层：解析层 / 预览层 / 复制链路 / 导出链路 / 平台兼容层。
 
-1. 数据层：是否真的多了文本、尾随换行、空字符串
-2. DOM 层：是否真的多了节点、行、wrapper
-3. 布局层：是否是 flex / grid / line-height / padding / stretch 导致的伪空行或伪对齐问题
-4. 样式层：是否是预览 CSS、导出样式、reset、第三方库默认样式导致的视觉偏差
+## 技术栈
+React 19 + TypeScript + Vite 8 + CodeMirror 6 + unified/remark/rehype + Shiki + remark-math/rehype-katex + Mermaid + Tailwind + Zustand + rehype-sanitize。后端 Cloudflare Workers（飞书代理，`src/worker.ts`）。
 
-**规则**：没有完成分层判断前，不要直接进入“改实现”阶段。
+## 常用命令
+| 命令 | 说明 |
+|------|------|
+| `pnpm dev` | 开发服务器（**5173**，飞书 OAuth 端口） |
+| `pnpm build` | 构建生产版本 |
+| `pnpm preview` | 预览构建（8787，**飞书 OAuth 不通**） |
+| `pnpm deploy` | 部署 Cloudflare Workers |
+| `pnpm lint` | ESLint 检查 |
+| `node --experimental-loader ./tests/_esm-resolve.mjs --test tests/*.test.ts` | 全量测试 |
 
----
+## TL;DR 硬规则
+**NEVER**：
+- 删用户资源笔记 / PDF / TXT / 源码文件未授权（含被注释的调试代码——可能是后续调试入口）。
+- 跨文件大重构 / 框架升级，未先说思路就执行。
+- 给飞书 block 注 `text_color`（`99992402`，见 `@src/feishu-blocks/CLAUDE.md`）。
+- 给 `<img>`/`<video>` 无条件加 `crossOrigin:'anonymous'`（致非 CORS CDN 热链加载失败）。
+- 新增 HTML 标签/属性不同步 `src/utils/sanitize-schema.ts` 白名单（会被静默剥）。
+- 改依赖不同步两份 lockfile（`pnpm-lock.yaml` + `package-lock.json`）。
+- 行为测试不带 ESM loader（`--experimental-loader`，**非** `--import`）。
+- 飞书本地开发用非 5173 端口（OAuth redirect_uri mismatch）。
 
-## 2. 遇到“有空白但没有对应编号/标记”，优先怀疑布局层
-如果现象是：
-- 代码区看起来像多一行
-- 但没有对应行号
-- 或列表/卡片/表格一侧多出空白而另一侧没有对应内容单位
+**ALWAYS**：
+- 显示异常先分层（数据 / DOM / 布局 / 样式），未定层前不改实现。
+- 多消费点问题先统一归一化输入，别只修派生数据。
+- 回归测试约束真实责任点，非复述猜想。
+- 本地图片区分「受控 `local-media://`」/「相对路径」/「`file:///`」；预览恢复与复制成功分别验证。
+- 相对路径图保留原始 `src`（`data-original-src`），防 `onerror` 改 src 后 hydrate 拿不回。
+- 包管理器构建失败先看日志是否停在依赖安装阶段（非业务代码）。
+- 编新闻/第三方报错不确定时直说不知道，不编造链接/API/命令。
 
-优先怀疑：
-- flex / grid 的交叉轴高度传播
-- stretch 导致的被动拉伸
-- padding / min-height / line-height 把整行容器撑高
+## 分层排查规则
+1. 显示异常（多一行 / 空白 / 对齐 / 某侧正常某侧异常）先分层：**数据层**（多文本/尾随换行/空串）/ **DOM 层**（多节点/行/wrapper）/ **布局层**（flex/grid/padding/stretch/line-height）/ **样式层**（预览 CSS/导出样式/reset/第三方默认）。未完成分层前不改实现。
+2. 「有空白但无对应编号/标记」优先怀疑**布局层**（flex 交叉轴高度传播 / stretch / padding / min-height / line-height 撑高容器）。无证据前别判成「真实多一行文本」。
+3. 同一显示问题影响多个消费点（行号 / 高亮 / 复制 / 导出）→ 先提炼统一归一化函数，所有消费点共用。别只修派生数据（如行号计算）不修渲染源。
+4. 回归测试约束真实责任点（数据归一化 / DOM 结构 / CSS 盒模型 / 导出结果），别写只验证「猜测实现」或复述当前推断的测试。
+5. 左右双栏单侧空白先查**高度传播**（父 flex/grid、一侧 padding/min-height/line-height、另一侧 stretch、第三方内容被动填充），再看内容本身。
 
-**规则**：没有证据前，不要把这种现象直接判断成“真实多了一行文本”。
+## sanitize 白名单
+`rehype-sanitize` 严格按 `src/utils/sanitize-schema.ts` 白名单过滤属性，未列入的**静默剥**（不报错）。
+- 踩过的坑：`<ol start>` / `<li value>` 曾未列入 → 有序列表全从 1 开始。
+- 规则：遇「HTML 属性在预览/导出丢失」优先查白名单；新增标签/属性必须同步白名单。
 
----
+## 本地图片资源
+本地图片/视频预览是「受控本地资源」机制，非浏览器天然支持本地路径。区分：
+1. **受控本地资源**：工具栏插入，`local-media://id`，本地资源存储可恢复。
+2. **普通相对路径**：`./foo.png`，浏览器不自动当可预览。
+3. **`file:///`**：浏览器安全边界，不可稳定预览。
 
-## 3. 同一个显示问题如果同时影响多个消费点，必须先统一输入
-如果一个问题同时影响：
-- 行号
-- 高亮渲染
-- 复制结果
-- 导出结果
+规则：
+- 「同一会话能预览」≠「刷新/复制后可恢复」。修本地图片先确认资源只在内存还是已持久化。
+- 复制链路能转 data URL ≠ 预览链路自动具恢复能力。预览恢复与复制成功**分别验证**。
+- `./foo.png` / `file:///` 不能默默当已支持；不可恢复给明确提示。
+- 支持相对路径图必须补齐两条链路（预览 hydration 映射 + 复制/export 转 data URL），只修一条致「页面正常但粘贴失败」或反之下不一致。
+- 目录授权模式：持久化映射 + 让 Preview 对 `relativeMediaMap` 变化响应重新 hydration（否则选了目录要手动刷新）。
+- 相对路径图保留原始 `src`（`data-original-src`），否则浏览器按原路径加载失败 → `onerror` 改 src 为 fallback → 后续 hydration 拿不回原路径，目录映射无法命中。
+- 普通 Markdown 图片 `title` **不**默认变可见图注（`![nms2.webp](nms2.webp "nms2.webp")` 会把文件名显示在图下，破坏阅读）。仅显式 caption 生成 `figcaption`。
 
-优先提炼统一归一化函数，让所有消费点使用同一份标准化输入。
+## 包管理器 / lockfile
+本项目本地 `pnpm`，但 CI / 托管平台可能默认 `npm`。
+- **双 lockfile**：`pnpm-lock.yaml`（本地）+ `package-lock.json`（HF Dockerfile `npm ci`）。`pnpm add` 只更 `pnpm-lock.yaml`，**不**同步 `package-lock.json` → HF `npm ci` 报 Missing 失败。改依赖后必须 `CF_PAGES=1 npm install --package-lock-only` 同步，两份一起提交。
+- `preinstall` 强制 `only-allow pnpm` 时，托管平台（Cloudflare Pages / HF）需放行（`ENV CF_PAGES=1` 绕过）。
+- 「构建失败」先看日志是否停在依赖安装阶段（包管理器冲突），非误判 TS/Vite 构建错。
+- 被源码直接 `import` 的类型包（尤其 `@types/*`）必须 `package.json` 显式声明，不依赖传递 hoisting（pnpm 严格模式不 hoist 传递依赖，`rm -rf node_modules` 重装暴露 latent bug）。诊断：`ls node_modules/@types/<name>`（顶层）vs `ls node_modules/.pnpm | grep @types+<name>`（.pnpm 仓库）。
+- `MermaidBlock.tsx` 已静态 `import mermaid`，其它文件再 `import('mermaid')` 动态导入无分包效果，反触发 `INEFFECTIVE_DYNAMIC_IMPORT` 警告。同模块已静态引入时跟着静态导入。
 
-**规则**：不要只修派生数据（例如只修行号计算）而不修真正渲染源。
+## 测试
+- **源码正则测试**（`readFileSync` + `assert.match`，不 import src）：`node --test tests/xxx.test.ts`，不需 loader。
+- **行为测试**（真 import src 跑转换 + 断言）：必须带 `node --experimental-loader ./tests/_esm-resolve.mjs --test tests/xxx.test.ts`（hook 补无扩展名相对导入 `.ts` + `@/` 别名）。⚠️ 用 `--experimental-loader`，**非** `--import`（后者不自动注册 resolve hook）。
+- node ESM 不解析无扩展名相对导入；vite/webpack 才补扩展名。
+- `remark-parse` code 节点 `.value` **无尾随换行**（测试断言别带 `\n`）。
 
----
+## 部署
+**Cloudflare Workers（推荐，飞书功能必需）**：内置 `src/worker.ts` 代理飞书 + 服务静态。配 secrets `FEISHU_APP_ID` / `FEISHU_APP_SECRET`；飞书后台 redirect_uri 配生产域名 `https://<domain>/api/feishu/oauth/callback`；`pnpm deploy`。纯静态部署飞书不可用。
 
-## 4. 回归测试必须约束真实责任点，不能只复述猜想
-遇到复杂 UI / 渲染问题时，测试必须先明确约束层级：
-- 数据归一化
-- DOM 结构
-- CSS 盒模型 / 布局
-- 导出结果
-
-**规则**：
-- 不要写只验证“猜测实现”的测试
-- 不要让测试只是复述当前推断
-- 应优先写最接近真实责任点的回归测试
-
----
-
-## 5. 左右双栏 UI 一旦出现单侧空白，先检查高度传播
-对于类似结构：
-
-```txt
-左侧：编号 / 标记 / 辅助列
-右侧：正文 / 代码 / 内容区
-```
-
-如果右侧出现“像多一行”的空白，而左侧没有对应编号，优先检查：
-1. 父容器是否是 `display: flex` 或 `grid`
-2. 左侧是否有上下 padding / min-height / line-height
-3. 右侧是否被 stretch 到和左侧同高
-4. 第三方渲染内容（如 Shiki）是否只是被动填充在更高盒子里
-
-**规则**：双栏错位问题先看容器高度传播，再看内容本身。
-
----
-
-## 6. 这次代码块伪空行问题的项目结论
-本项目里，代码块相关的空白问题最终分成三层：
-
-1. **数据层**：尾随换行会影响代码块行数计算和渲染输入，需要统一归一化
-2. **布局层**：左侧 `.code-block-lines` 的纵向 padding 会把 flex 行撑高，右侧代码区被动拉伸，形成无编号的伪第二行
-3. **复制链路层**：预览与单块复制修好后，不代表 toolbar copy-all 自动同步修复；凡是复制/导出仍走另一条 HTML 序列化出口（如 `prepareClipboardHtml()`），必须单独检查 `<pre><code>` 是否也应用了同样的归一化规则
-
-**规则**：以后遇到类似问题，至少同时检查：
-- 预览渲染出口
-- 单块复制出口
-- toolbar / clipboard 序列化出口
-
-不要因为“页面上看起来已经好了”就默认复制结果也已经正确。
-
----
-
-## 7. 头条外链复制兼容规则
-头条文章支持外链，但不能假设“普通 HTML `<a>` 标签粘贴进去就会完整保留链接属性”。
-
-处理头条模式下的链接时，必须注意：
-1. 头条专属复制/导出链路要单独兼容，不要把问题当成全局 HTML 问题处理。
-2. 修复时优先检查：
-   - `applyToutiaoStyles()` 输出的链接形式
-   - `prepareClipboardHtml()` 最终写入剪贴板的 HTML/text
-   - 头条是否会在 paste 时清洗普通外链 `<a>`
-3. 不要因为预览里链接正常，就默认复制到头条后仍然正常；预览、剪贴板、头条粘贴是三层不同链路。
-4. 在没有充分证据前，不要直接把正文内所有超链接降级成纯文本 URL；这会明显破坏阅读体验。应先验证：
-   - 我们复制前的最终 HTML 里链接是否还在
-   - 头条是否支持另一种可点击的输入形式
-5. 不要为了解决头条问题而直接放宽全局 sanitization 规则，头条兼容必须限制在头条专属链路内。
-6. 如果证据已经证明头条不支持 pasted `<a>`，就不要继续保留 anchor 再赌平台粘贴效果；应改成**内联纯文本 URL**，不要用新的 `<span>` / block 包装去替换，否则很容易引入额外换行或段落错位。
-7. 头条对“有序列表 + 嵌套无序列表”的 pasted HTML 不应只依赖原生 `<ol>` marker；如果序号是关键结果，头条链路要把顶层序号显式写入导出内容结构中，否则平台 paste 后可能把每个顶层项都重算成 1。并且这类显式编号注入必须具备幂等性，避免重复格式化时插入多份编号。
-8. 针对列表导出测试，不能把微信和头条当成同一种目标平台。微信链路可以继续断言原生 ordered-list marker；头条链路如果已改成 block 结构显式编号，测试就必须按头条的真实导出结构断言，不能继续沿用“保留原生 decimal marker”的旧假设。
-9. 头条对嵌套列表的 paste 重排不只发生在顶层 `<ol>`，内层 `<ul>/<li>` 也可能被继续解释成编号流。因此在头条链路里，如果顶层序号和内层 bullet 都是关键结果，就要把两层 list 语义都改成显式 block 结构：顶层用显式 `1.` / `2.`，内层 bullet 用显式 `•` 行，而不是只修顶层 `ol`。
-10. 头条里显式编号不能依赖 `display:flex` 去把“编号 + 正文”排成一行，因为 paste 后平台可能不保留这层布局语义，导致编号单独占一行。更稳的做法是把编号直接 prepend 到正文第一段里，让编号和正文共用同一文本流。
-
----
-
-## 12. Cloudflare Pages 与包管理器规则
-本项目本地默认使用 `pnpm`，但 Cloudflare Pages 免费构建环境可能默认用 `npm clean-install`。
-
-**规则**：
-1. 如果项目通过 `preinstall` 强制限制包管理器（如 `only-allow pnpm`），必须同时考虑托管平台的默认安装器，否则会在“安装依赖阶段”直接失败，根本进不到构建阶段。
-2. 对 Cloudflare Pages 这类环境，应优先采用：
-   - Pages 环境中放行安装器检查
-   - 本地开发环境继续保留 `pnpm` 约束
-3. 不要把“Cloudflare 构建失败”先误判成 TypeScript/Vite 构建错误；先看日志是否停在依赖安装阶段。
-4. 如果日志里已经出现 `npm clean-install`，而项目又有 `only-allow pnpm`，根因通常就是包管理器冲突，不是业务代码错误。
-
----
-
-## 11. 复杂平台兼容问题的排错复盘规则
-这次头条嵌套列表问题之所以连续多次试错，根因不是单一实现失误，而是排错顺序错了。
-
-### 这次试错的根因
-1. **过早下结论，只盯住表面症状的一层**
-   - 一开始把问题看成“顶层序号错了”，先修顶层 `<ol>`。
-   - 实际上问题分了三层：
-     - 顶层 `<ol>` 会被头条重排
-     - 内层 `<ul>/<li>` 也会被继续并入编号流
-     - 即使 list 语义去掉，如果编号与正文依赖 `flex` 横排，头条 paste 后仍可能分行
-   - 只修第一层，后两层会继续暴露，造成“修了但还不对”的连续试错感。
-
-2. **没有尽早抓“目标平台最终收到的 HTML”作为证据**
-   - 前几轮是在看源码、看预览、看推断。
-   - 真正把问题钉死的是后面直接打印 `applyToutiaoStyles()` 之后的最终 HTML，看到头条链路到底保留了什么结构。
-   - 没有这一步，容易一直围着猜测转。
-
-3. **把“浏览器里能工作”的结构误当成“平台 paste 后也能工作”**
-   - 例如 `flex + span + div` 在预览里正常，不代表头条 paste 后会保留同样布局语义。
-   - 对头条/公众号这类目标平台，必须假设：
-     - HTML 结构可能被重排
-     - CSS 语义可能丢失
-     - 原生 list/anchor 行为可能失效
-
-4. **测试一开始没有完全对准最终目标结构**
-   - 早期测试还在沿用“原生 ordered list marker 应该保留”的旧假设。
-   - 当实现已经转向“显式 block 结构”后，测试如果不及时对齐，就会继续误导判断。
-
-### 以后如何避免
-1. **先抓目标平台最终输入/输出证据，再决定修哪一层**
-   - 对平台兼容问题，优先拿到：
-     - 原始解析 HTML
-     - 平台专属导出 HTML
-     - 目标平台实际粘贴结果/截图
-   - 不要只靠源码推断。
-
-2. **先画问题分层，再动手**
-   - 至少先判断问题属于：
-     - 解析层
-     - 导出结构层
-     - 平台 paste 重排层
-     - CSS/布局层
-   - 如果一个现象可能跨多层，不要先赌其中一层就是根因。
-
-3. **对头条这类平台，优先使用“最不依赖平台语义”的结构**
-   - 顶层编号：显式文本编号
-   - 内层 bullet：显式 `•` 文本行
-   - 不依赖原生 list marker
-   - 不依赖 flex 横排来维持编号与正文同行
-
-4. **测试必须跟随最终策略，而不是跟随早期假设**
-   - 一旦实现策略从“保留原生语义”切换到“显式 block 结构”，测试也必须同步切换断言方式。
-
-### 项目规则
-以后遇到“目标平台粘贴后结果异常”的问题，必须按这个顺序处理：
-1. 先拿目标平台最终收到的 HTML 或等价证据
-2. 再拆成解析层 / 导出层 / 平台重排层 / 布局层
-3. 优先选择最不依赖目标平台语义的导出结构
-4. 让测试和最终导出策略保持一致，不再沿用旧假设
-
----
-
-## 8. sanitize-schema 白名单经验
-`rehype-sanitize` 会严格按 `sanitize-schema.ts` 的白名单过滤 HTML 属性。如果某个 HTML 属性没有被显式列入白名单，它就会被静默清掉，不会报错。
-
-已踩过的坑：
-- `<ol start="N">` 的 `start` 属性曾未列入白名单，导致被打断的有序列表全部从 1 开始。
-- `<li value="N">` 的 `value` 属性同理。
-
-**规则**：
-- 遇到"某个 HTML 属性在预览/导出中丢失"的问题，优先检查 `sanitize-schema.ts` 的白名单。
-- 新增 HTML 标签或属性支持时，必须同步更新白名单，否则 sanitize 会静默吞掉。
-
----
-
-## 9. Deep Research 引用标记类内容的注意事项
-类似 `【27†L315-L323】` 的 deep research 引用标记在本项目中需要注意：
-
-1. **解析层无问题**：`†`（dagger）、`【】`（CJK 括号）、`L315-L323` 等在 remark/rehype 链路中不会被误解析，sanitize 也不会清掉它们。
-2. **表格单元格宽度**：引用标记会让表格单元格内容变长，在窄屏或 mobile 模式下可能导致表格横向溢出。排查表格布局问题时，要考虑这类长标记对列宽的影响。
-3. **平台导出兼容**：`†` 字符在微信公众号和头条号中通常能正常显示，但如果目标平台对特殊 Unicode 字符有过滤策略，可能会出现字符丢失。遇到"某个字符在预览正常但导出后消失"时，优先怀疑目标平台的字符过滤，而不是我们的渲染链路。
-4. **阅读体验**：大量引用标记会显著降低正文可读性。如果用户反馈"文章太乱"，不要默认是渲染 bug；可能只是内容本身需要清理引用标记。这属于内容层问题，不属于渲染层问题。
-
----
-
-## 10. 本地图片资源规则
-本项目里的本地图片/视频预览，本质上是“受控本地资源”机制，不等于浏览器天然支持普通本地路径。
-
-必须区分三类情况：
-1. **受控本地资源**：通过工具栏插入，写成 `local-media://id`，并在本地资源存储中可恢复
-2. **普通相对路径**：如 `./foo.png`，浏览器不会自动把它当可预览本地文件
-3. **file:/// 本地路径**：受浏览器安全边界影响，不能假设可稳定预览
-
-**规则**：
-- 不要把“同一会话内能预览”误当成“刷新/复制后仍然可恢复”。
-- 修复本地图片问题时，先确认资源是：
-  - 只存在于内存
-  - 还是已经持久化可恢复
-- 复制链路能转成 data URL，不代表预览链路自动具备恢复能力；预览恢复与复制成功要分别验证。
-- 对 `./foo.png`、`file:///...` 这类普通本地路径，不要默默当成已支持功能；如果不能恢复，应给出明确提示。
-- 如果要支持普通相对路径图片，必须同时补齐两条链路：
-  1. 预览 hydration 能把相对路径映射到已授权目录中的文件
-  2. 复制/export 链路也能把同一映射转成 data URL
-  只修预览不修复制，或只修复制不修预览，都会出现“页面正常但粘贴失败”或“粘贴正常但预览失败”的不一致。
-- 目录授权模式下，除了持久化相对路径映射本身，还必须让 Preview 对 `relativeMediaMap` 的变化产生响应并重新 hydration；否则用户即使成功选了目录，也要手动刷新后才能看到图片，表现会像“功能没生效”。
-- 如果相对路径图片依赖后续 hydration 才能恢复，就必须保留原始 `src`（例如用 `data-original-src`）。否则浏览器会先按原始相对路径加载失败，`onerror` 立刻把 `src` 改成 fallback 图，后面的 hydration 就再也拿不到原始路径，目录授权映射也无法命中。
-- 普通 Markdown 图片的 `title` 不应默认变成可见图注；否则像 `![nms2.webp](nms2.webp "nms2.webp")` 这种写法会把文件名直接显示在图片下方，破坏预览和平台导出的阅读体验。只有显式 caption 才应生成 `figcaption`。
+**Hugging Face Spaces（Docker）** 已踩坑：
+1. README 必须 UTF-8 **without BOM**（HF 解析 frontmatter 严要求首行 `---`，BOM 致 frontmatter 失效）。Windows 记事本默认加 BOM。
+2. Dockerfile 用 `npm ci` + `package-lock.json`（canonical lockfile），`ENV CF_PAGES=1` 绕过 `only-allow pnpm`。
+3. HF 硬性：uid 1000 非 root（`useradd -m -u 1000 user`）、监听 `0.0.0.0:7860`（非 `127.0.0.1`）、`COPY --chown=user`（非 `chown -R`，镜像翻倍）。
+4. HF 初始化 Space 自带 commit（默认 README + LFS `.gitattributes`），首 push rejected → 先 `git fetch hf main` + `git merge hf/main --allow-unrelated-histories`。冲突：README 保本地，`.gitattributes` 本地规则在前再追加 HF LFS。
+5. 「网页打不开但 Logs 显 Accepting connections」通常是网络层（GFW 对 `*.hf.space` TLS 不稳），先换网络/代理，别先怀疑容器。
+6. 双 lockfile 同步（见上「包管理器」）。
