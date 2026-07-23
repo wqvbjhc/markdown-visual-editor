@@ -96,14 +96,18 @@ export function Toolbar() {
   const [feishuTip, setFeishuTip] = useState('')
   const [feishuBusy, setFeishuBusy] = useState(false)
   // 创建飞书文档按钮需 Workers 后端（/api/feishu/*）。纯静态部署（HF / 静态站）无后端 → 隐藏按钮。
-  // 探测 /api/feishu/status：返 200 = Worker 在；返 404/异常 = 无后端，隐藏。
+  // 探测 /api/feishu/status：Worker 返 JSON（Content-Type: application/json）= 后端在。
+  // ⚠️ 不能只判 res.ok：HF 用 `serve -s dist`（SPA rewrite），未匹配路径（含 /api/*）会
+  // fallback 到 index.html 仍返 200，但 Content-Type 是 text/html。故必须验 Content-Type，
+  // 把 SPA fallback 的「假 200」与真后端 JSON 响应区分开。
   const [feishuBackendAvailable, setFeishuBackendAvailable] = useState(false)
   useEffect(() => {
     let cancelled = false
     fetch('/api/feishu/status', { headers: { Accept: 'application/json' } })
       .then((res) => {
         if (cancelled) return
-        setFeishuBackendAvailable(res.ok)
+        const ct = res.headers.get('content-type') || ''
+        setFeishuBackendAvailable(res.ok && ct.includes('application/json'))
       })
       .catch(() => {
         if (!cancelled) setFeishuBackendAvailable(false)
