@@ -39,6 +39,7 @@ React 19 + TypeScript + Vite 8 + CodeMirror 6 + unified/remark/rehype + Shiki + 
 - 相对路径图保留原始 `src`（`data-original-src`），防 `onerror` 改 src 后 hydrate 拿不回。
 - 包管理器构建失败先看日志是否停在依赖安装阶段（非业务代码）。
 - 编新闻/第三方报错不确定时直说不知道，不编造链接/API/命令。
+- TS 构建验证用 `npx tsc -b --force`（清 `.tsbuildinfo` 增量缓存全量编），**别**只信 `tsc -b` 增量——增量缓存会跳过未改文件，掩盖类型错（本地绿、HF 干净 `npm ci` 全量编红）。
 
 ## 分层排查规则
 1. 显示异常（多一行 / 空白 / 对齐 / 某侧正常某侧异常）先分层：**数据层**（多文本/尾随换行/空串）/ **DOM 层**（多节点/行/wrapper）/ **布局层**（flex/grid/padding/stretch/line-height）/ **样式层**（预览 CSS/导出样式/reset/第三方默认）。未完成分层前不改实现。
@@ -96,3 +97,4 @@ React 19 + TypeScript + Vite 8 + CodeMirror 6 + unified/remark/rehype + Shiki + 
    - **诊断法**：build 后查 `ls dist/index.html` 是否存在；只信干净构建（`rm -rf dist && npm run build`）的产物布局，别信累积 `dist/`。
    - **修法**：HF 不跑 Worker（飞书不可用），Dockerfile 只取 `dist/client`：`COPY --from=builder /app/dist/client ./dist`，`serve -s dist` 才命中 `index.html`。
    - **通用规则**：`@cloudflare/vite-plugin` 启用后，任何「拷 `dist/` 再伺服」的部署（Dockerfile / 静态服务器）都要确认产物根是 `dist/` 还是 `dist/client/`，别假设根有 `index.html`。
+8. **HF 是干净 `npm ci` + 全量 `tsc`，本地增量缓存会掩盖错**：HF Dockerfile `COPY . .` 不带本地 `.tsbuildinfo`，`npm run build`（= `tsc -b && vite build`）走全量编译，本地被增量缓存跳过的类型错在 HF 全暴露（实测：`feishu.ts` `querySelectorAll` 返 `Element[]` 经 `.filter` 不缩窄到 `HTMLElement`，传 `HTMLElement` 形参报 TS2345，本地 `tsc -b` 绿、HF 红）。**提交前本地用 `npx tsc -b --force` 清缓存全量编**复现 HF 行为，别信增量。
