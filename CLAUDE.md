@@ -40,6 +40,7 @@ React 19 + TypeScript + Vite 8 + CodeMirror 6 + unified/remark/rehype + Shiki + 
 - 相对路径图保留原始 `src`（`data-original-src`），防 `onerror` 改 src 后 hydrate 拿不回。
 - 包管理器构建失败先看日志是否停在依赖安装阶段（非业务代码）。
 - 编新闻/第三方报错不确定时直说不知道，不编造链接/API/命令。
+- 复制链路剥标题自锚超链接：rehype-autolink-headings(behavior:wrap) 产的 `<a href="#slug">` 离开本页是死链，复制到公众号/头条/飞书/默认都变无意义超链接。单点 `prepareClipboardHtml` 调 `unwrapSelfAnchorHeadingLinks`（`src/utils/heading-links.ts`，全格式覆盖），不在各 format 函数里重复剥。预览保留自锚（跳锚点导航），见 `@src/feishu-blocks/CLAUDE.md`「标题超链接」。
 - TS 构建验证用 `npx tsc -b --force`（清 `.tsbuildinfo` 增量缓存全量编），**别**只信 `tsc -b` 增量——增量缓存会跳过未改文件，掩盖类型错（本地绿、HF 干净 `npm ci` 全量编红）。
 
 ## 分层排查规则

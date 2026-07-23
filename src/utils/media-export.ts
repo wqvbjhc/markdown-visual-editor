@@ -2,6 +2,7 @@ import { normalizeCodeBlockText } from '@/components/CodeBlock'
 import type { LocalMediaRecord } from './media'
 import { blobToDataUrl, buildMissingMediaSvg, getVideoLink, normalizeRelativeMediaPath, parseLocalMediaId, readPersistedRelativeMedia } from './media'
 import { renderMermaidToDataUrl } from './mermaid-png'
+import { unwrapSelfAnchorHeadingLinks } from './heading-links'
 
 export interface CopyPreparationResult {
   html: string
@@ -84,6 +85,11 @@ export async function prepareClipboardHtml(
   if (!root) {
     return { html, text: '', warnings: [] }
   }
+
+  // 全格式统一剥标题自锚超链接：rehype-autolink-headings 把标题包进 <a href="#slug">，
+  // 离开本页是死链，复制到公众号/头条/飞书/默认都只会变无意义超链接。此处是复制链路单点
+  // （所有格式必经），零额外 DOM parse（复用已 parse 的 root）。
+  unwrapSelfAnchorHeadingLinks(root)
 
   const warnings: string[] = []
   const localImages: LocalMediaRecord[] = []

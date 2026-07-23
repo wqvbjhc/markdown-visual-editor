@@ -38,13 +38,8 @@ assert.ok(out.includes('$$'), '块级公式应输出 $$ 包裹')
 // 标题里的公式不认 LaTeX（飞书标题不支持公式），降级为纯文本：不能有 $ 字面量
 assert.ok(!out.includes('E=mc^2'), `标题公式应降级去 LaTeX 源码，不应出现 E=mc^2 字面`)
 
-// 标题里的 autolink 锚点 <a href="#..."> 必须去掉
-const dom = new JSDOM(out)
-const headings = dom.window.document.querySelectorAll('h1,h2,h3,h4,h5,h6')
-headings.forEach((h) => {
-  const anchor = h.querySelector('a[href^="#"]')
-  assert.ok(!anchor, `标题内不应保留自锚点超链接，got: ${h.innerHTML}`)
-})
+// 标题自锚超链接的剥离已移交复制链路单点（prepareClipboardHtml → unwrapSelfAnchorHeadingLinks），
+// 不再是 applyFeishuStyles 职责。见 tests/heading-links.test.ts。
 
 // 公式 code（正文里的 $...$）必须不带代码块样式：飞书把带 background 的 <code> 当字面代码，
 // 不触发 LaTeX 公式识别（含在 <strong>/<em> 等内联标签里的公式同样必须裸 code）。
