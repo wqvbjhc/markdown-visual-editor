@@ -35,4 +35,15 @@ assert.ok(formulas.some((f) => f.includes('[0, 2\\pi]')), `[0, 2\\pi] 应完整�
 // 块级公式必须是 $$...$$（独立段落），不能塌成行内
 assert.ok(out.includes('$$'), '块级公式应输出 $$ 包裹')
 
+// 标题里的公式不认 LaTeX（飞书标题不支持公式），降级为纯文本：不能有 $ 字面量
+assert.ok(!out.includes('E=mc^2'), `标题公式应降级去 LaTeX 源码，不应出现 E=mc^2 字面`)
+
+// 标题里的 autolink 锚点 <a href="#..."> 必须去掉
+const dom = new JSDOM(out)
+const headings = dom.window.document.querySelectorAll('h1,h2,h3,h4,h5,h6')
+headings.forEach((h) => {
+  const anchor = h.querySelector('a[href^="#"]')
+  assert.ok(!anchor, `标题内不应保留自锚点超链接，got: ${h.innerHTML}`)
+})
+
 console.log('feishu formula source preserved ok')

@@ -39,9 +39,12 @@ const TAG_STYLES: Record<string, string> = {
 }
 
 /**
- * 把 .katex 节点替换成 LaTeX 源码。
- * 行内公式（无 .katex-display 祖先）→ <code>$tex$</code>
- * 块级公式（.katex-display）→ 独立段落 <p><code>$$\ntex\n$$</code></p>（飞书块级公式需独占一行）
+ * 把 .katex 节点替换成飞书可粘贴内容。
+ * 飞书**正文**认 LaTeX 源码 `$...$` → 行内公式取 annotation LaTeX 包 code。
+ * 飞书**标题不支持公式**，标题里的 .katex 若留 `$...$` 会显示成字面量 → 降级为 KaTeX 视觉文本
+ *   （取 `.katex-html` 的 textContent，如 E=mc2；分式等复杂结构会塌平，但可读且无 $ 噪声）。
+ *
+ * 块级公式（.katex-display，必在正文段落）→ 独立 <p><code>$$\ntex\n$$</code></p>。
  */
 function replaceKatexWithLatex(root: HTMLElement): void {
   // 块级公式：先处理 .katex-display 内的 .katex（替换整个 display 容器为段落）
@@ -57,12 +60,40 @@ function replaceKatexWithLatex(root: HTMLElement): void {
   })
   // 行内公式：剩下的 .katex（display 已被替换，不会重复命中）
   root.querySelectorAll('.katex').forEach((katex) => {
+    const inHeading = katex.closest('h1,h2,h3,h4,h5,h6') !== null
+    if (inHeading) {
+      // 标题不支持公式：降级为 KaTeX 视觉纯文本（去 MathML/annotation 重复）
+      const htmlLayer = katex.querySelector('.katex-html')
+      const visualText = (htmlLayer?.textContent || '').trim()
+      katex.replaceWith(root.ownerDocument.createTextNode(visualText || ''))
+      return
+    }
     const annot = katex.querySelector('annotation[encoding="application/x-tex"]')
     const tex = (annot?.textContent || '').trim()
     if (!tex) return
     const code = root.ownerDocument.createElement('code')
     code.textContent = `$${tex}$`
     katex.replaceWith(code)
+  })
+}
+
+/**
+ * 去掉标题里的超链接包裹。
+ * rehype-autolink-headings (behavior:wrap) 把整个标题文本包在 <a href="#锚点"> 里，
+ * 飞书粘贴会把标题变成超链接（点标题跳锚点，无意义且干扰）。unwrap：用 <a> 子节点替换 <a> 本身。
+ */
+function unwrapHeadingLinks(root: HTMLElement): void {
+  root.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach((h) => {
+    h.querySelectorAll('a').forEach((a) => {
+      const anchor = a as HTMLAnchorElement
+      // 仅去掉标题内的锚点链接（href 以 # 开头的自锚）；外链保留（标题里外链罕见但不动）
+      const href = anchor.getAttribute('href') || ''
+      if (!href.startsWith('#')) return
+      const parent = anchor.parentElement
+      if (!parent) return
+      while (anchor.firstChild) parent.insertBefore(anchor.firstChild, anchor)
+      anchor.remove()
+    })
   })
 }
 
@@ -107,6 +138,7 @@ export function applyFeishuStyles(html: string): string {
   const root = doc.body.firstElementChild as HTMLElement
 
   replaceKatexWithLatex(root)
+  unwrapHeadingLinks(root)
   neutralizeVideos(root)
   const replacedImages = neutralizeImages(root)
 
