@@ -32,6 +32,20 @@ export function ensureMermaidExportConfig(): void {
 }
 
 /**
+ * 把边标签底色改不透明白底，作为 <style> 注入 SVG 内部。
+ *
+ * 为何要注入：SVG 经 <img> 画 canvas 时，外部 CSS（index.css 的 !important 规则）不进 <img> 文档，
+ * mermaid 自带 .edgeLabel{background-color:rgba(232,232,232,.8)} 半透明底原样保留 → 线穿字。
+ * 把 <style> 塞进 SVG 自身文档才被 <img> 认。!important 压过 mermaid 的 #id scope 规则。
+ * 覆盖 classic（rect/fill）+ neo（div/background-color）两种标签渲染。
+ */
+function injectOpaqueEdgeLabels(svg: string): string {
+  const style =
+    '<style>.edgeLabel,.edgeLabel p,.labelBkg{background-color:#fff!important;fill:#fff!important;opacity:1!important}.edgeLabel rect{fill:#fff!important;background-color:#fff!important;opacity:1!important}</style>'
+  return /<svg[^>]*>/.test(svg) ? svg.replace(/(<svg[^>]*>)/, `$1${style}`) : svg
+}
+
+/**
  * SVG string → PNG data URL（canvas 2x 绘制，白底防透明）。
  * 优先显式 width/height；width="100%"（百分号）落 viewBox 兜底；都没则 800×600。
  */
@@ -47,7 +61,9 @@ export function svgToPngDataUrl(svg: string): Promise<string> {
       if (vb) { w = w || Number(vb[1]); h = h || Number(vb[2]) }
     }
     if (!w || !h) { w = 800; h = 600 }
-    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
+    // 边标签遮线注入（外部 CSS 不入 <img>，见 injectOpaqueEdgeLabels 注释）
+    const styledSvg = injectOpaqueEdgeLabels(svg)
+    const blob = new Blob([styledSvg], { type: 'image/svg+xml;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const img = new Image()
     img.onload = () => {

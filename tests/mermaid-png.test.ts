@@ -21,6 +21,11 @@ assert.match(mermaidPngSrc, /\(\?!%\)/, "width 正则负前瞻排除百分号宽
 assert.match(mermaidPngSrc, /fillStyle\s*=\s*['"]#fff['"]/, "PNG 白底防透明（公众号/飞书防黑底）")
 assert.match(mermaidPngSrc, /toDataURL\(['"]image\/png['"]\)/, "canvas → PNG data URL")
 
+// 边标签遮线：SVG 经 <img> 栅格化时外部 CSS（index.css）不生效，必须把不透明白底注入 SVG 内部，
+// 否则 mermaid 自带 rgba(232,232,232,.8) 半透明底 → 线穿过标签文字
+assert.match(mermaidPngSrc, /injectOpaqueEdgeLabels/, "PNG 必须注入边标签不透明底（外部 CSS 不入 <img>）")
+assert.match(mermaidPngSrc, /\.edgeLabel[^}]*background-color:\s*#fff/, "注入的边标签底必须不透明白")
+
 // 复制注入：media-export.ts 必须 export injectMermaidPngs，渲 PNG 替换 mermaid-block 为 <img>
 const mediaExportSrc = readFileSync(new URL('../src/utils/media-export.ts', import.meta.url), 'utf8')
 assert.match(mediaExportSrc, /export async function injectMermaidPngs/, "复制路径必须有 injectMermaidPngs")

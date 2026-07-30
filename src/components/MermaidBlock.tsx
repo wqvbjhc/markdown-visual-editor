@@ -1,49 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
-import mermaid from 'mermaid'
-
-let mermaidIdCounter = 0
-
-function initMermaid(isDark: boolean) {
-  mermaid.initialize({
-    startOnLoad: false,
-    theme: isDark ? 'dark' : 'default',
-    securityLevel: 'loose',
-    fontFamily: 'system-ui, sans-serif',
-  })
-}
+import { useState } from 'react'
+import { useMermaidSvg } from '@/hooks/useMermaidSvg'
+import { MermaidZoomModal } from './MermaidZoomModal'
 
 export function MermaidBlock({ code, isDark }: { code: string; isDark: boolean }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [svg, setSvg] = useState('')
+  const { svg, error } = useMermaidSvg(code, isDark)
+  const [open, setOpen] = useState(false)
 
-  useEffect(() => {
-    if (!code.trim()) return
-    initMermaid(isDark)
-
-    const id = `mermaid-${++mermaidIdCounter}`
-    let cancelled = false
-
-    mermaid.render(id, code.trim()).then(
-      ({ svg: rendered }) => {
-        // mermaid v10+ 临时测量 svg 用 id 自身；v9 用 d{id}。两者都清防 DOM 残留
-        document.getElementById(id)?.remove()
-        document.getElementById('d' + id)?.remove()
-        if (!cancelled) { setSvg(rendered); setError(null) }
-      },
-      (err) => {
-        if (!cancelled) {
-          setError(String(err?.message || err))
-          setSvg('')
-        }
-        document.getElementById(id)?.remove()
-        document.getElementById('d' + id)?.remove()
-      },
-    )
-
-    return () => { cancelled = true }
-  }, [code, isDark])
-
+  // hooks 在前，错误态早返在其后（hooks 调用顺序稳定，不违反 rules of hooks）
   if (error) {
     return (
       <div className="mermaid-error">
@@ -54,5 +17,15 @@ export function MermaidBlock({ code, isDark }: { code: string; isDark: boolean }
     )
   }
 
-  return <div ref={ref} className="mermaid-rendered" dangerouslySetInnerHTML={{ __html: svg }} />
+  return (
+    <>
+      <div
+        className="mermaid-rendered"
+        title="点击放大"
+        onClick={() => setOpen(true)}
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      {open && <MermaidZoomModal code={code} isDark={isDark} onClose={() => setOpen(false)} />}
+    </>
+  )
 }
