@@ -38,7 +38,7 @@
     'g', 'defs', 'marker', 'text', 'foreignObject',
   ],
   attributes: {
-    '*': ['className', 'id', 'style'],
+    '*': ['className', 'id', 'style', 'dataSourceLine'],
     a: ['href', 'target', 'rel', 'title'],
     img: ['src', 'alt', 'title', 'width', 'height', 'loading', 'decoding', 'referrerPolicy', 'data-caption', 'data-width', 'data-media-kind', 'data-original-src'],
     video: ['src', 'poster', 'controls', 'preload', 'muted', 'playsInline', 'title', 'crossOrigin', 'referrerPolicy', 'data-media-link'],

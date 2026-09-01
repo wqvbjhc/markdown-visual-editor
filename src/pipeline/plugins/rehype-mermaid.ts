@@ -29,6 +29,10 @@ export function rehypeMermaid() {
         properties: {
           className: ['mermaid-block'],
           'data-mermaid': code,
+          // 保留 remark-source-line 注入的源行号锚点（滚动同步用；pre 整体替换时属性会丢）
+          ...(codeEl.properties?.dataSourceLine !== undefined
+            ? { dataSourceLine: codeEl.properties.dataSourceLine }
+            : {}),
         },
         children: [{ type: 'text', value: code }],
       }

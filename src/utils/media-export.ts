@@ -91,6 +91,9 @@ export async function prepareClipboardHtml(
   // （所有格式必经），零额外 DOM parse（复用已 parse 的 root）。
   unwrapSelfAnchorHeadingLinks(root)
 
+  // 剥滚动同步锚点：data-source-line 是站内同步模块的内部属性，不应流入剪贴板/外部平台（同单点）
+  root.querySelectorAll('[data-source-line]').forEach((el) => el.removeAttribute('data-source-line'))
+
   const warnings: string[] = []
   const localImages: LocalMediaRecord[] = []
   const persistedRelativeMedia = readPersistedRelativeMedia()

@@ -19,6 +19,7 @@ import { rehypeVideo } from './plugins/rehype-video'
 import { rehypeMermaid } from './plugins/rehype-mermaid'
 import { remarkDeAI } from './plugins/remark-deai'
 import { remarkMediaDirective } from './plugins/remark-media-directive'
+import { remarkSourceLine } from './plugins/remark-source-line'
 
 function createProcessor(enableDeAI: boolean) {
   const processor = unified()
@@ -35,6 +36,8 @@ function createProcessor(enableDeAI: boolean) {
 
   return processor
     .use(remarkMediaDirective)
+    // mdast 阶段末尾注入源行号锚点（滚动同步用），须在 remarkRehype 前
+    .use(remarkSourceLine)
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeKatex)
     .use(rehypeMermaid)

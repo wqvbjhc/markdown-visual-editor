@@ -7,6 +7,7 @@ import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { syntaxHighlighting, defaultHighlightStyle, bracketMatching } from '@codemirror/language'
 import { useStore } from '@/utils/store'
+import { scrollSync } from '@/utils/scroll-sync'
 
 const lightTheme = EditorView.theme({
   '&': { height: '100%', fontSize: '14px' },
@@ -66,6 +67,8 @@ export function MarkdownEditor() {
 
     if (viewRef.current) viewRef.current.destroy()
     viewRef.current = new EditorView({ state, parent: containerRef.current })
+    // 滚动同步：注册 .cm-scroller（theme 重建 view 时上面 unregister 已摘除旧监听）
+    scrollSync.registerEditor(viewRef.current)
 
     setEditorInsertHandler((snippet: string) => {
       const view = viewRef.current
@@ -103,6 +106,7 @@ export function MarkdownEditor() {
 
     return () => {
       setEditorInsertHandler(null)
+      scrollSync.unregisterEditor()
       viewRef.current?.destroy()
     }
   }, [theme]) // eslint-disable-line react-hooks/exhaustive-deps

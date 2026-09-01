@@ -7,10 +7,12 @@ import { applyWechatStyles } from '@/formats/wechat'
 import { applyToutiaoStyles } from '@/formats/toutiao'
 import { getCurrentAccent } from '@/utils/color-schemes'
 import { hydrateLocalMedia } from '@/utils/media'
+import { scrollSync } from '@/utils/scroll-sync'
 
 export function Preview() {
   const { html, format, theme, colorSchemeId, customAccent, localMediaMap, relativeMediaMap } = useStore()
   const containerRef = useRef<HTMLDivElement>(null)
+  const paneRef = useRef<HTMLDivElement>(null)
   const rootsRef = useRef(new Set<ReturnType<typeof createRoot>>())
   const renderSeqRef = useRef(0)
   const isDark = theme === 'dark'
@@ -50,11 +52,17 @@ export function Preview() {
       if (lang === 'mermaid') return
       const code = codeEl.textContent || ''
       const wrapper = document.createElement('div')
+      // CodeBlock 接管 pre：滚动同步锚点 data-source-line 在内层 code 上，须拷给 wrapper 否则代码块对不齐
+      const sourceLine = codeEl.getAttribute('data-source-line')
+      if (sourceLine) wrapper.setAttribute('data-source-line', sourceLine)
       pre.replaceWith(wrapper)
       const root = createRoot(wrapper)
       rootsRef.current.add(root)
       root.render(<CodeBlock code={code} lang={lang} isDark={isDark} />)
     })
+
+    // innerHTML 整棵替换后锚点全换 + 高度漂移：通知 scroll-sync 重建缓存并按最近来源侧重对齐
+    scrollSync.onPreviewRendered()
   }, [html, format, isDark, accent, localMediaMap, relativeMediaMap])
 
   useEffect(() => {
@@ -68,12 +76,18 @@ export function Preview() {
     }
   }, [])
 
+  // 滚动同步：预览滚动容器是 .preview-pane（overflow-y:auto），非内容 div
+  useEffect(() => {
+    if (paneRef.current) scrollSync.registerPreviewPane(paneRef.current)
+    return () => scrollSync.unregisterPreviewPane()
+  }, [])
+
   const wrapperClass = format === 'mobile'
     ? 'mobile-frame'
     : 'preview-content'
 
   return (
-    <div className="preview-pane">
+    <div className="preview-pane" ref={paneRef}>
       <div ref={containerRef} className={`${wrapperClass} prose-container`} />
     </div>
   )
