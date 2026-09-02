@@ -25,7 +25,9 @@ function createProcessor(enableDeAI: boolean) {
   const processor = unified()
     .use(remarkParse)
     .use(remarkCjkFriendly)
-    .use(remarkGfm)
+    // singleTilde:false 关单波浪线删除线（GFM 默认允许 ~x~）：中文技术写作常用 ~ 表数字范围
+    // （0.1~0.2、2024~2026），同段多个范围会被顺序配对成删除线吞掉中间正文。~~x~~ 仍可用
+    .use(remarkGfm, { singleTilde: false })
     .use(remarkMath)
     .use(remarkBreaks)
     .use(remarkDirective)

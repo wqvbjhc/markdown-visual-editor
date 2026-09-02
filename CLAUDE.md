@@ -44,6 +44,7 @@ React 19 + TypeScript + Vite 8 + CodeMirror 6 + unified/remark/rehype + Shiki + 
 - TS 构建验证用 `npx tsc -b --force`（清 `.tsbuildinfo` 增量缓存全量编），**别**只信 `tsc -b` 增量——增量缓存会跳过未改文件，掩盖类型错（本地绿、HF 干净 `npm ci` 全量编红）。
 - 编辑器/预览同步滚动走「源行号锚点」：`remark-source-line` 注 `data-source-line`，`scroll-sync.ts` 双向插值映射。任何接替/重建预览 DOM 的环节（CodeBlock 换 pre、rehype-mermaid 换 pre、未来新组件）都必须拷贝锚点属性，否则该类块对不齐；内部锚点不得流入复制/导出产物（`prepareClipboardHtml` 单点剥）。
 - 测 CM6「视口顶行号」别用 `querySelectorAll('.cm-line')` 索引——CM6 虚拟化只渲染视口附近行，索引≠绝对行号；用文本标记反推或 gutter。
+- GFM 单波浪线也是删除线定界符（`singleTilde` 默认开）：中文数字范围 `0.1~0.2` 同段多个会被顺序配对成 `<del>` 吞中间正文。已 `remarkGfm({ singleTilde:false })`，`~~x~~` 不受影响；新增解析行为变更先跑全量测试防误伤。
 - 滚动动画 scrollTop 写入被浏览器整数量化：指数趋近在残差≈1px 时步长<0.5px 永远写不进下一格，收敛条件永不满足产"僵尸循环"（空转+吞真实输入+按陈旧 goal 回拉）。同步/滚动动画必须：残差<2px 直接落 goal + 强制寿命兜底 + 收敛出口清动画身份。
 - 滚动同步的平滑动画 τ 必须自适应：连续事件流（触控板）即时跟随（事件密度自带平滑），静止后的跳变（TOC/重对齐/单次滚轮）才用指数滑行。恒定 τ 会造成连续流永远滞后 + 间隙误判收敛churn（「落后-追平」周期追赶=卡顿）。且强制寿命按「goal 最后变化」计时，不能按动画启动时刻——否则连续滚动每 N ms 被周期性强杀（滚轮单手势短不触发、触控板长流必触发的「滚轮正常触控板卡顿」假象）。
 
