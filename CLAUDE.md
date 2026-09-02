@@ -44,6 +44,7 @@ React 19 + TypeScript + Vite 8 + CodeMirror 6 + unified/remark/rehype + Shiki + 
 - TS 构建验证用 `npx tsc -b --force`（清 `.tsbuildinfo` 增量缓存全量编），**别**只信 `tsc -b` 增量——增量缓存会跳过未改文件，掩盖类型错（本地绿、HF 干净 `npm ci` 全量编红）。
 - 编辑器/预览同步滚动走「源行号锚点」：`remark-source-line` 注 `data-source-line`，`scroll-sync.ts` 双向插值映射。任何接替/重建预览 DOM 的环节（CodeBlock 换 pre、rehype-mermaid 换 pre、未来新组件）都必须拷贝锚点属性，否则该类块对不齐；内部锚点不得流入复制/导出产物（`prepareClipboardHtml` 单点剥）。
 - 测 CM6「视口顶行号」别用 `querySelectorAll('.cm-line')` 索引——CM6 虚拟化只渲染视口附近行，索引≠绝对行号；用文本标记反推或 gutter。
+- 滚动动画 scrollTop 写入被浏览器整数量化：指数趋近在残差≈1px 时步长<0.5px 永远写不进下一格，收敛条件永不满足产"僵尸循环"（空转+吞真实输入+按陈旧 goal 回拉）。同步/滚动动画必须：残差<2px 直接落 goal + 强制寿命兜底 + 收敛出口清动画身份。
 
 ## 分层排查规则
 1. 显示异常（多一行 / 空白 / 对齐 / 某侧正常某侧异常）先分层：**数据层**（多文本/尾随换行/空串）/ **DOM 层**（多节点/行/wrapper）/ **布局层**（flex/grid/padding/stretch/line-height）/ **样式层**（预览 CSS/导出样式/reset/第三方默认）。未完成分层前不改实现。

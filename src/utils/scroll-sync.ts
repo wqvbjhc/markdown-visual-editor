@@ -7,9 +7,13 @@ import type { EditorView } from '@codemirror/view'
  * 滚动时把「来源侧视口顶」映射到行号坐标，再经锚点区间线性插值得到
  * 「目标侧滚动位置」，两侧连续对应不跳变。
  *
- * 防回环：程序化写目标侧 scrollTop 前置 lockUntil 时间戳（120ms），
- * 目标侧回声 scroll 事件在锁窗口内且非来源侧 → 忽略；
- * 用户 wheel/touchstart 立即清锁（用户意图优先，不出现"顶死"）。
+ * v2 平滑机制（替代时间戳锁）：
+ * - 追逐动画：目标侧不瞬移，每帧 cur += (goal-cur)*(1-e^(-dt/τ)) 帧率无关指数趋近，
+ *   小步滚动连续自然，源停后 ~200ms 收敛 <1px。
+ * - 事件准入四规则：① 源侧事件处理；② 正被自己动画的侧忽略（回声）；
+ *   ③ staleUntil 未到忽略（接管后旧源残余动量，250ms，掐断源身份拉锯）；
+ *   ④ 其余处理并接管（覆盖 TOC 平滑滚动、滚动条拖拽——首帧即接管）。
+ * - 手势接管：wheel/touchstart/pointerdown（两侧）+ keydown（编辑器）立即切源并抑制对侧动量。
  *
  * 与 React 解耦：组件只 register/unregister，预览重渲染后调 onPreviewRendered()
  * 重建锚点缓存并按最近来源侧重对齐（innerHTML 整棵替换后内容高度变化会漂移）。
@@ -23,7 +27,27 @@ interface Anchor {
   line: number
 }
 
-const LOCK_MS = 120
+/** 追逐动画通道：单实例，新 goal 只更新不重启循环 */
+interface AnimState {
+  targetSide: ScrollSide | null
+  goal: number
+  rafId: number | null
+  lastT: number
+  startT: number
+  stillFrames: number
+}
+
+// 指数趋近时间常数：每 45ms 消除 ~63% 差值；100px 跳变约 5τ≈225ms 收敛
+const SMOOTH_TAU = 45
+// 收敛判定：残差 <0.75px（一个取整格的一半）连续两帧即停
+const CONVERGE_EPS = 0.75
+// 残差小于 2px 直接落 goal：scrollTop 写入被浏览器整数量化，渐进 step<0.5 写不进下一格，
+// 会卡在 diff≈1 的死区永不收敛（实测 zombie 循环：不动画、不清 targetSide、吞真实输入、按陈旧 goal 回拉）
+const SNAP_PX = 2
+// 动画强制寿命：兜底防任何未预见死区产生僵尸循环
+const ANIM_MAX_MS = 700
+// 接管后旧源残余动量抑制窗口
+const STALE_MS = 250
 
 function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max)
@@ -34,8 +58,9 @@ class ScrollSync {
   private pane: HTMLElement | null = null
   private anchors: Anchor[] = []
   private anchorsDirty = true
-  private lockUntil = 0
   private sourceSide: ScrollSide | null = null
+  private staleUntil: Record<ScrollSide, number> = { editor: 0, preview: 0 }
+  private anim: AnimState = { targetSide: null, goal: 0, rafId: null, lastT: 0, startT: 0, stillFrames: 0 }
   private rafId: number | null = null
 
   // ---- 注册 / 注销（组件挂载期成对调用）----
@@ -43,16 +68,18 @@ class ScrollSync {
   registerEditor(view: EditorView): void {
     this.unregisterEditor()
     this.editor = view
-    view.scrollDOM.addEventListener('scroll', this.onEditorScroll, { passive: true })
-    view.scrollDOM.addEventListener('wheel', this.clearLock, { passive: true })
-    view.scrollDOM.addEventListener('touchstart', this.clearLock, { passive: true })
+    const dom = view.scrollDOM
+    dom.addEventListener('scroll', this.onEditorScroll, { passive: true })
+    this.bindGestures(dom, 'editor')
+    // 键盘滚动（方向键/PageDown）与打字时光标 scrollIntoView 也算编辑器侧意图
+    view.contentDOM.addEventListener('keydown', this.takeEditor)
   }
 
   unregisterEditor(): void {
     if (!this.editor) return
     this.editor.scrollDOM.removeEventListener('scroll', this.onEditorScroll)
-    this.editor.scrollDOM.removeEventListener('wheel', this.clearLock)
-    this.editor.scrollDOM.removeEventListener('touchstart', this.clearLock)
+    this.unbindGestures(this.editor.scrollDOM)
+    this.editor.contentDOM.removeEventListener('keydown', this.takeEditor)
     this.editor = null
   }
 
@@ -60,17 +87,36 @@ class ScrollSync {
     this.unregisterPreviewPane()
     this.pane = pane
     pane.addEventListener('scroll', this.onPreviewScroll, { passive: true })
-    pane.addEventListener('wheel', this.clearLock, { passive: true })
-    pane.addEventListener('touchstart', this.clearLock, { passive: true })
+    this.bindGestures(pane, 'preview')
   }
 
   unregisterPreviewPane(): void {
     if (!this.pane) return
     this.pane.removeEventListener('scroll', this.onPreviewScroll)
-    this.pane.removeEventListener('wheel', this.clearLock)
-    this.pane.removeEventListener('touchstart', this.clearLock)
+    this.unbindGestures(this.pane)
     this.pane = null
   }
+
+  /** 手势接管监听：滚轮/触摸/按下（两侧），滚动条拖拽无事件靠准入规则 ④ 兜底 */
+  private bindGestures(dom: HTMLElement, side: ScrollSide): void {
+    const handler = () => this.takeover(side)
+    dom.addEventListener('wheel', handler, { passive: true })
+    dom.addEventListener('touchstart', handler, { passive: true })
+    dom.addEventListener('pointerdown', handler, { passive: true })
+    this.gestureHandlerRef.set(dom, handler)
+  }
+
+  private unbindGestures(dom: HTMLElement): void {
+    const handler = this.gestureHandlerRef.get(dom)
+    if (!handler) return
+    dom.removeEventListener('wheel', handler)
+    dom.removeEventListener('touchstart', handler)
+    dom.removeEventListener('pointerdown', handler)
+    this.gestureHandlerRef.delete(dom)
+  }
+
+  /** WeakMap 保存同引用便于注销（addEventListener/removeEventListener 须同一函数） */
+  private gestureHandlerRef = new WeakMap<HTMLElement, () => void>()
 
   /** 预览 innerHTML 重渲染完成后调用：失效锚点缓存并按最近来源侧重对齐 */
   onPreviewRendered(): void {
@@ -84,29 +130,42 @@ class ScrollSync {
     })
   }
 
-  // ---- 事件入口 ----
+  // ---- 事件入口与准入 ----
 
   private onEditorScroll = (): void => this.handleScroll('editor')
   private onPreviewScroll = (): void => this.handleScroll('preview')
+  private takeEditor = (): void => this.takeover('editor')
 
-  /** 用户直接操作（滚轮/触摸）立即清锁：目标侧回声与真用户输入不可分辨时，让位用户 */
-  private clearLock = (): void => {
-    this.lockUntil = 0
+  /** 手势接管：立即切源，抑制旧源残余动量（防源身份往返拉锯），取消旧动画 */
+  private takeover(side: ScrollSide): void {
+    if (this.sourceSide === side) return
+    this.sourceSide = side
+    this.staleUntil[this.other(side)] = performance.now() + STALE_MS
+    if (this.anim.targetSide === side) this.cancelAnim() // 新源不再是动画目标
   }
 
   private handleScroll(side: ScrollSide): void {
     const now = performance.now()
-    // 锁窗口内的对侧事件 = 程序化滚动的回声，忽略
-    if (now < this.lockUntil && side !== this.sourceSide) return
+    // 规则②：自己动画产生的回声
+    if (this.anim.targetSide === side) return
+    // 规则③：接管后旧源残余动量
+    if (now < this.staleUntil[side]) return
+    // 规则①/④：源侧直接处理；非源侧（TOC 平滑滚动、滚动条拖拽等真实输入）接管
     this.sourceSide = side
+
     if (this.rafId !== null) return
     this.rafId = requestAnimationFrame(() => {
       this.rafId = null
-      this.applySync(side)
+      // 用当前源侧而非闭包 side：同帧内可能发生源切换（如双侧事件竞速）
+      if (this.sourceSide) this.applySync(this.sourceSide)
     })
   }
 
-  // ---- 同步主流程 ----
+  private other(side: ScrollSide): ScrollSide {
+    return side === 'editor' ? 'preview' : 'editor'
+  }
+
+  // ---- 同步主流程：算 goal，交追逐动画 ----
 
   private applySync(side: ScrollSide): void {
     if (!this.editor || !this.pane) return
@@ -115,7 +174,7 @@ class ScrollSync {
     else this.syncPreviewToEditor()
   }
 
-  /** 编辑器 → 预览：视口顶源码位置（行 + 块内小数）→ 锚点行区间插值 → pane.scrollTop */
+  /** 编辑器 → 预览：视口顶源码位置（行 + 块内小数）→ 锚点行区间插值 → 动画到 goal */
   private syncEditorToPreview(): void {
     const view = this.editor!
     const pane = this.pane!
@@ -124,7 +183,7 @@ class ScrollSync {
 
     if (this.anchors.length < 2) {
       // 降级：无锚点（空文档/纯 HTML）按比例同步
-      this.applyProportional(scroller, pane)
+      this.animateTo('preview', this.proportionalGoal(scroller, pane))
       return
     }
 
@@ -141,17 +200,16 @@ class ScrollSync {
     const t = span > 0 ? clamp((srcLine - a1.line) / span, 0, 1) : 0
     const targetTop = a1.top + t * (a2.top - a1.top)
 
-    this.lockUntil = performance.now() + LOCK_MS
-    pane.scrollTop = clamp(targetTop, 0, Math.max(0, pane.scrollHeight - pane.clientHeight))
+    this.animateTo('preview', clamp(targetTop, 0, Math.max(0, pane.scrollHeight - pane.clientHeight)))
   }
 
-  /** 预览 → 编辑器：视口顶锚点区间像素比例 → 反推行号小数 → 编辑器该行对齐视口顶 */
+  /** 预览 → 编辑器：视口顶锚点区间像素比例 → 反推行号小数 → 编辑器该行动画对齐视口顶 */
   private syncPreviewToEditor(): void {
     const view = this.editor!
     const pane = this.pane!
 
     if (this.anchors.length < 2) {
-      this.applyProportional(pane, view.scrollDOM)
+      this.animateTo('editor', this.proportionalGoal(pane, view.scrollDOM))
       return
     }
 
@@ -167,17 +225,85 @@ class ScrollSync {
     const pad = this.contentPadTop(view)
     const scroller = view.scrollDOM
 
-    this.lockUntil = performance.now() + LOCK_MS
-    scroller.scrollTop = clamp(block.top + pad, 0, Math.max(0, scroller.scrollHeight - scroller.clientHeight))
+    this.animateTo('editor', clamp(block.top + pad, 0, Math.max(0, scroller.scrollHeight - scroller.clientHeight)))
   }
 
-  /** 比例降级：无锚点时按滚动进度百分比对应（长文档会漂，仅保不失效） */
-  private applyProportional(from: HTMLElement, to: HTMLElement): void {
+  /** 比例降级的 goal（不直接 set，走同一动画通道保持视觉一致） */
+  private proportionalGoal(from: HTMLElement, to: HTMLElement): number {
     const fromMax = from.scrollHeight - from.clientHeight
     const toMax = to.scrollHeight - to.clientHeight
-    if (fromMax <= 0 || toMax <= 0) return
-    this.lockUntil = performance.now() + LOCK_MS
-    to.scrollTop = clamp((from.scrollTop / fromMax) * toMax, 0, toMax)
+    if (fromMax <= 0 || toMax <= 0) return to.scrollTop
+    return clamp((from.scrollTop / fromMax) * toMax, 0, toMax)
+  }
+
+  // ---- 追逐动画：每帧指数趋近 goal，帧率无关，收敛自停 ----
+
+  private animateTo(targetSide: ScrollSide, goal: number): void {
+    const changed = this.anim.targetSide !== targetSide
+    if (changed) this.cancelAnim()
+    this.anim.targetSide = targetSide
+    this.anim.goal = goal
+    if (this.anim.rafId !== null) return // 循环进行中，仅更新 goal
+    this.anim.lastT = performance.now()
+    this.anim.startT = this.anim.lastT
+    this.anim.stillFrames = 0
+    this.anim.rafId = requestAnimationFrame(this.stepAnim)
+  }
+
+  private stepAnim = (): void => {
+    this.anim.rafId = null
+    const target = this.anim.targetSide === 'editor' ? this.editor?.scrollDOM : this.pane
+    if (!target || this.anim.targetSide === null) {
+      this.cancelAnim()
+      return
+    }
+    const now = performance.now()
+    const dt = Math.max(1, now - this.anim.lastT)
+    this.anim.lastT = now
+
+    // 兜底寿命：任何未预见死区不得产生僵尸循环（僵尸态会吞真实输入并按陈旧 goal 回拉）
+    if (now - this.anim.startT > ANIM_MAX_MS) {
+      target.scrollTop = this.anim.goal
+      this.finishAnim(target)
+      return
+    }
+
+    const cur = target.scrollTop
+    const diff = this.anim.goal - cur
+    if (Math.abs(diff) < SNAP_PX) {
+      // 残差小：直接落 goal（浏览器自行取整到最近格），跨过渐进写入的取整死区
+      target.scrollTop = this.anim.goal
+    } else {
+      // 帧率无关指数趋近：每 τ 时间消除 63% 残差
+      target.scrollTop = cur + diff * (1 - Math.exp(-dt / SMOOTH_TAU))
+    }
+
+    if (Math.abs(this.anim.goal - target.scrollTop) < CONVERGE_EPS) {
+      this.anim.stillFrames += 1
+      if (this.anim.stillFrames >= 2) this.finishAnim(target)
+    } else {
+      this.anim.stillFrames = 0
+    }
+    if (this.anim.rafId === null && this.anim.targetSide !== null) {
+      this.anim.rafId = requestAnimationFrame(this.stepAnim)
+    }
+  }
+
+  /** 收敛/终止出口：清动画身份并置陈旧窗吞末帧回声（防被动侧凭回声误接管源身份反向回拉） */
+  private finishAnim(target: HTMLElement): void {
+    const finishedSide = this.anim.targetSide
+    target.scrollTop = this.anim.goal
+    this.cancelAnim()
+    if (finishedSide) this.staleUntil[finishedSide] = performance.now() + STALE_MS
+  }
+
+  private cancelAnim(): void {
+    if (this.anim.rafId !== null) {
+      cancelAnimationFrame(this.anim.rafId)
+      this.anim.rafId = null
+    }
+    this.anim.targetSide = null
+    this.anim.stillFrames = 0
   }
 
   // ---- 锚点索引 ----
