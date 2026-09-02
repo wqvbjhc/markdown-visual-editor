@@ -10,8 +10,10 @@ import type { EditorView } from '@codemirror/view'
  * v2 平滑机制（替代时间戳锁）：
  * - 追逐动画：目标侧不瞬移，每帧 cur += (goal-cur)*(1-e^(-dt/τ)) 帧率无关指数趋近，
  *   小步滚动连续自然，源停后 ~200ms 收敛 <1px。
- * - 事件准入四规则：① 源侧事件处理；② 正被自己动画的侧忽略（回声）；
+ * - 事件准入：① 源侧事件处理；② 正被自己动画的侧忽略（回声）；
  *   ③ staleUntil 未到忽略（接管后旧源残余动量，250ms，掐断源身份拉锯）；
+ *   ⑤ 距最后一次程序化写入 <80ms 的非源侧事件视为漏网回声忽略（封死回声翻转源的
+ *   上下振动闭环，触控板高频小步流最易触发）；
  *   ④ 其余处理并接管（覆盖 TOC 平滑滚动、滚动条拖拽——首帧即接管）。
  * - 手势接管：wheel/touchstart/pointerdown（两侧）+ keydown（编辑器）立即切源并抑制对侧动量。
  *
@@ -48,6 +50,10 @@ const SNAP_PX = 2
 const ANIM_MAX_MS = 700
 // 接管后旧源残余动量抑制窗口
 const STALE_MS = 250
+// 回声防护窗：该侧距我们最后一次程序化写入 <80ms 时，其 scroll 事件一律视为回声不得经规则④接管源身份。
+// 封堵所有漏网回声路径（动画换向取消不设 stale、收敛后超时残留、浏览器异步派发迟滞），
+// 从机制上掐死「回声翻转源 → 反向同步 → 对侧回声再翻转」的上下振动闭环（触控板高频小步流最易触发）。
+const ECHO_GUARD_MS = 80
 
 function clamp(v: number, min: number, max: number): number {
   return Math.min(Math.max(v, min), max)
@@ -60,6 +66,7 @@ class ScrollSync {
   private anchorsDirty = true
   private sourceSide: ScrollSide | null = null
   private staleUntil: Record<ScrollSide, number> = { editor: 0, preview: 0 }
+  private lastWriteAt: Record<ScrollSide, number> = { editor: 0, preview: 0 }
   private anim: AnimState = { targetSide: null, goal: 0, rafId: null, lastT: 0, startT: 0, stillFrames: 0 }
   private rafId: number | null = null
 
@@ -150,6 +157,9 @@ class ScrollSync {
     if (this.anim.targetSide === side) return
     // 规则③：接管后旧源残余动量
     if (now < this.staleUntil[side]) return
+    // 规则⑤（回声防护）：距我们最后一次程序化写入该侧 <80ms 的事件视为漏网回声，
+    // 不得借此接管源身份（源身份翻转是「上下振动」的唯一机制入口）
+    if (now - this.lastWriteAt[side] < ECHO_GUARD_MS && side !== this.sourceSide) return
     // 规则①/④：源侧直接处理；非源侧（TOC 平滑滚动、滚动条拖拽等真实输入）接管
     this.sourceSide = side
 
@@ -263,7 +273,7 @@ class ScrollSync {
 
     // 兜底寿命：任何未预见死区不得产生僵尸循环（僵尸态会吞真实输入并按陈旧 goal 回拉）
     if (now - this.anim.startT > ANIM_MAX_MS) {
-      target.scrollTop = this.anim.goal
+      this.writeScroll(this.anim.targetSide, target, this.anim.goal)
       this.finishAnim(target)
       return
     }
@@ -272,10 +282,10 @@ class ScrollSync {
     const diff = this.anim.goal - cur
     if (Math.abs(diff) < SNAP_PX) {
       // 残差小：直接落 goal（浏览器自行取整到最近格），跨过渐进写入的取整死区
-      target.scrollTop = this.anim.goal
+      this.writeScroll(this.anim.targetSide, target, this.anim.goal)
     } else {
       // 帧率无关指数趋近：每 τ 时间消除 63% 残差
-      target.scrollTop = cur + diff * (1 - Math.exp(-dt / SMOOTH_TAU))
+      this.writeScroll(this.anim.targetSide, target, cur + diff * (1 - Math.exp(-dt / SMOOTH_TAU)))
     }
 
     if (Math.abs(this.anim.goal - target.scrollTop) < CONVERGE_EPS) {
@@ -289,10 +299,16 @@ class ScrollSync {
     }
   }
 
+  /** 程序化写目标侧 scrollTop 并记时间戳（回声防护窗规则⑤依赖） */
+  private writeScroll(side: ScrollSide | null, target: HTMLElement, value: number): void {
+    target.scrollTop = value
+    if (side) this.lastWriteAt[side] = performance.now()
+  }
+
   /** 收敛/终止出口：清动画身份并置陈旧窗吞末帧回声（防被动侧凭回声误接管源身份反向回拉） */
   private finishAnim(target: HTMLElement): void {
     const finishedSide = this.anim.targetSide
-    target.scrollTop = this.anim.goal
+    this.writeScroll(finishedSide, target, this.anim.goal)
     this.cancelAnim()
     if (finishedSide) this.staleUntil[finishedSide] = performance.now() + STALE_MS
   }
