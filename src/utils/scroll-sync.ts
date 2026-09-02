@@ -36,6 +36,8 @@ interface AnimState {
   rafId: number | null
   lastT: number
   startT: number
+  /** goal 最后一次更新时刻：区分「连续滚动流」（即时跟随）与「静止后跳变」（平滑滑行） */
+  lastGoalAt: number
   stillFrames: number
 }
 
@@ -46,6 +48,8 @@ const CONVERGE_EPS = 0.75
 // 残差小于 2px 直接落 goal：scrollTop 写入被浏览器整数量化，渐进 step<0.5 写不进下一格，
 // 会卡在 diff≈1 的死区永不收敛（实测 zombie 循环：不动画、不清 targetSide、吞真实输入、按陈旧 goal 回拉）
 const SNAP_PX = 2
+// goal 活跃判定窗：60ms 内有更新视为连续滚动流（即时跟随），静止后的跳变才走滑行动画
+const GOAL_ACTIVE_MS = 60
 // 动画强制寿命：兜底防任何未预见死区产生僵尸循环
 const ANIM_MAX_MS = 700
 // 接管后旧源残余动量抑制窗口
@@ -67,7 +71,7 @@ class ScrollSync {
   private sourceSide: ScrollSide | null = null
   private staleUntil: Record<ScrollSide, number> = { editor: 0, preview: 0 }
   private lastWriteAt: Record<ScrollSide, number> = { editor: 0, preview: 0 }
-  private anim: AnimState = { targetSide: null, goal: 0, rafId: null, lastT: 0, startT: 0, stillFrames: 0 }
+  private anim: AnimState = { targetSide: null, goal: 0, rafId: null, lastT: 0, startT: 0, lastGoalAt: 0, stillFrames: 0 }
   private rafId: number | null = null
 
   // ---- 注册 / 注销（组件挂载期成对调用）----
@@ -148,6 +152,9 @@ class ScrollSync {
     if (this.sourceSide === side) return
     this.sourceSide = side
     this.staleUntil[this.other(side)] = performance.now() + STALE_MS
+    // 新源自身的陈旧窗必须清零：它作为旧动画目标时被置的 stale 会把用户换侧后的
+    // 首批真实输入吞掉 ≤250ms（换侧跟手卡顿）
+    this.staleUntil[side] = 0
     if (this.anim.targetSide === side) this.cancelAnim() // 新源不再是动画目标
   }
 
@@ -253,7 +260,13 @@ class ScrollSync {
     if (changed) this.cancelAnim()
     this.anim.targetSide = targetSide
     this.anim.goal = goal
-    if (this.anim.rafId !== null) return // 循环进行中，仅更新 goal
+    this.anim.lastGoalAt = performance.now()
+    if (this.anim.rafId !== null) {
+      // 循环进行中仅更新 goal；寿命按「goal 最后变化」计时——连续滚动（触控板）goal 每帧在变，
+      // 不得按动画启动时刻强杀（实测每 700ms 跳一次 = 触控板卡顿，滚轮单手势 <700ms 不触发）
+      this.anim.startT = performance.now()
+      return
+    }
     this.anim.lastT = performance.now()
     this.anim.startT = this.anim.lastT
     this.anim.stillFrames = 0
@@ -280,8 +293,12 @@ class ScrollSync {
 
     const cur = target.scrollTop
     const diff = this.anim.goal - cur
-    if (Math.abs(diff) < SNAP_PX) {
-      // 残差小：直接落 goal（浏览器自行取整到最近格），跨过渐进写入的取整死区
+    // τ 自适应：goal 持续更新（连续滚动流）→ 即时跟随。事件密度自带平滑，追逐滞后反而造成
+    // 「落后-追平」周期性追赶爆发（实测 pane/编辑器速度比 1.8↔1.1 振荡 = 触控板卡顿感）；
+    // goal 静止 ≥GOAL_ACTIVE_MS 后的跳变（TOC/重对齐/单次滚轮）才用指数滑行
+    const goalStreaming = now - this.anim.lastGoalAt < GOAL_ACTIVE_MS
+    if (Math.abs(diff) < SNAP_PX || goalStreaming) {
+      // 直接落 goal（浏览器自行取整到最近格），跨过渐进写入的取整死区
       this.writeScroll(this.anim.targetSide, target, this.anim.goal)
     } else {
       // 帧率无关指数趋近：每 τ 时间消除 63% 残差
@@ -290,7 +307,9 @@ class ScrollSync {
 
     if (Math.abs(this.anim.goal - target.scrollTop) < CONVERGE_EPS) {
       this.anim.stillFrames += 1
-      if (this.anim.stillFrames >= 2) this.finishAnim(target)
+      if (this.anim.stillFrames >= 2) {
+        this.finishAnim(target)
+      }
     } else {
       this.anim.stillFrames = 0
     }
