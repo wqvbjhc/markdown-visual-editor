@@ -97,7 +97,7 @@ React 19 + TypeScript + Vite 8 + CodeMirror 6 + unified/remark/rehype + Shiki + 
 2. Dockerfile 用 `npm ci` + `package-lock.json`（canonical lockfile），`ENV CF_PAGES=1` 绕过 `only-allow pnpm`。
 3. HF 硬性：uid 1000 非 root（`useradd -m -u 1000 user`）、监听 `0.0.0.0:7860`（非 `127.0.0.1`）、`COPY --chown=user`（非 `chown -R`，镜像翻倍）。
 4. HF 初始化 Space 自带 commit（默认 README + LFS `.gitattributes`），首 push rejected → 先 `git fetch hf main` + `git merge hf/main --allow-unrelated-histories`。冲突：README 保本地，`.gitattributes` 本地规则在前再追加 HF LFS。
-5. 「网页打不开但 Logs 显 Accepting connections」通常是网络层（GFW 对 `*.hf.space` TLS 不稳），先换网络/代理，别先怀疑容器。
+5. 「网页打不开但 Logs 显 Accepting connections」通常是网络层（GFW 对 `*.hf.space` TLS 不稳），先换网络/代理，别先怀疑容器。**分层判别法（实测有效）**：① 本机 `curl` 直连多次 → 通则服务+网络基本层正常；② 全新无痕 Playwright Chromium 加载 → 通则排除 GFW 按 TLS 指纹选择性阻断与 QUIC 黑洞；③ 仅用户日常浏览器超时（如「响应时间过长」）→ 浏览器本地状态问题：清 `chrome://net-internals/#dns` host cache + `#sockets` socket 池，无痕窗口/换浏览器/查代理类扩展（系统代理关闭不代表扩展级代理不存在）。别把 ③ 误判成部署故障。
 6. 双 lockfile 同步（见上「包管理器」）。
 7. **`@cloudflare/vite-plugin` 改变产物布局**：`vite build` 后产物**不**在 `dist/` 根，而是 `dist/client/`（SPA）+ `dist/markdown_visual_editor/`（Worker bundle）。Dockerfile 若 `COPY dist ./dist` 再 `serve -s dist`，因 `dist/index.html` 不存在（只在 `dist/client/`）→ `serve` 回退成**目录列表**（列 `client/` 和 `markdown_visual_editor/` 两文件夹）。
    - **本地能跑是假象**：本地 `dist/` 残留旧构建（无 cloudflare 插件时产物在根），根下还存旧 `index.html`；HF 是干净 `npm ci` + 全新 build，只产 `dist/client/`，根为空 → 才暴露。
