@@ -19,6 +19,7 @@ import { rehypeVideo } from './plugins/rehype-video'
 import { rehypeMermaid } from './plugins/rehype-mermaid'
 import { remarkDeAI } from './plugins/remark-deai'
 import { remarkMediaDirective } from './plugins/remark-media-directive'
+import { remarkRecoverDirective } from './plugins/remark-recover-directive'
 import { remarkSourceLine } from './plugins/remark-source-line'
 
 function createProcessor(enableDeAI: boolean) {
@@ -31,6 +32,9 @@ function createProcessor(enableDeAI: boolean) {
     .use(remarkMath)
     .use(remarkBreaks)
     .use(remarkDirective)
+    // remark-directive 把正文 1:1 / py:80-87 这类裸 :name 解析成空 <div> 丢字，
+    // 还原插件必须在 directive 解析后、消费 directive 的插件前
+    .use(remarkRecoverDirective)
 
   if (enableDeAI) {
     processor.use(remarkDeAI)
