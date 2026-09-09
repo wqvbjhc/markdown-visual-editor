@@ -46,6 +46,7 @@ React 19 + TypeScript + Vite 8 + CodeMirror 6 + unified/remark/rehype + Shiki + 
 - 测 CM6「视口顶行号」别用 `querySelectorAll('.cm-line')` 索引——CM6 虚拟化只渲染视口附近行，索引≠绝对行号；用文本标记反推或 gutter。
 - GFM 单波浪线也是删除线定界符（`singleTilde` 默认开）：中文数字范围 `0.1~0.2` 同段多个会被顺序配对成 `<del>` 吞中间正文。已 `remarkGfm({ singleTilde:false })`，`~~x~~` 不受影响；新增解析行为变更先跑全量测试防误伤。
 - remark-directive 的裸 `:name`（无 `[label]{props}`）也是合法内联 textDirective，名字允许数字/连字符：正文 `1:1`、`dataLoader.py:80-87`、`4:1` 全被解析成空 `<div></div>` 丢字（比 `~` 更隐蔽，不划线直接消失）。已加 `remarkRecoverDirective` 还原非 image/video 的误解析指令（textDirective 全还原；行首 leafDirective 只还原裸形态，带 `{…}` 视为有意使用）。插件顺序：必须在 `remarkDirective` 之后、消费 directive 的插件（remarkMediaDirective）之前。
+- Pandoc 风格 LaTeX 定界符 `\(...\)` / `\[...\]`：remark-math 只认 `$/$$`，`\(` 先被 CommonMark 反斜杠转义吃掉，残留 `_` 下标再被强调规则（cjk-friendly 放宽 CJK 侧侧翼）跨段配对成 `<em>`，双重损坏。`pandoc-math.ts` 在 parse 前原位等长替换成 `$/$$`（先 parse 一遍保护 code/inlineCode/math/html 区间；不成对不动；标准多行 `\[\n内容\n\]` 天然产块级 `$$` 公式，零行偏移不伤滚动锚点）。接入点两处：`processMarkdown` 与飞书 `convertMarkdownToFeishu`（独立 parse 栈都要覆盖）。
 - 滚动动画 scrollTop 写入被浏览器整数量化：指数趋近在残差≈1px 时步长<0.5px 永远写不进下一格，收敛条件永不满足产"僵尸循环"（空转+吞真实输入+按陈旧 goal 回拉）。同步/滚动动画必须：残差<2px 直接落 goal + 强制寿命兜底 + 收敛出口清动画身份。
 - 滚动同步的平滑动画 τ 必须自适应：连续事件流（触控板）即时跟随（事件密度自带平滑），静止后的跳变（TOC/重对齐/单次滚轮）才用指数滑行。恒定 τ 会造成连续流永远滞后 + 间隙误判收敛churn（「落后-追平」周期追赶=卡顿）。且强制寿命按「goal 最后变化」计时，不能按动画启动时刻——否则连续滚动每 N ms 被周期性强杀（滚轮单手势短不触发、触控板长流必触发的「滚轮正常触控板卡顿」假象）。
 

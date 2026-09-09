@@ -21,6 +21,7 @@ import { remarkDeAI } from './plugins/remark-deai'
 import { remarkMediaDirective } from './plugins/remark-media-directive'
 import { remarkRecoverDirective } from './plugins/remark-recover-directive'
 import { remarkSourceLine } from './plugins/remark-source-line'
+import { convertPandocMathDelimiters } from './pandoc-math'
 
 function createProcessor(enableDeAI: boolean) {
   const processor = unified()
@@ -65,7 +66,8 @@ const deAIProcessor = createProcessor(true)
 
 export async function processMarkdown(md: string, enableDeAI: boolean = false): Promise<string> {
   const processor = enableDeAI ? deAIProcessor : defaultProcessor
-  const file = await processor.process(md)
+  // \(...\)/\[...\] Pandoc 公式定界符须在 parse 前归一化成 $/$$，parse 后反斜杠已被吃
+  const file = await processor.process(convertPandocMathDelimiters(md))
   return String(file)
 }
 

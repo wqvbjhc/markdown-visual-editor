@@ -35,6 +35,7 @@ import type {
   TableCell,
 } from 'mdast'
 import { remarkDeAI } from '../pipeline/plugins/remark-deai'
+import { convertPandocMathDelimiters } from '../pipeline/pandoc-math'
 import {
   BlockType,
   type DescendantPayload,
@@ -109,7 +110,8 @@ function buildParser(enableDeAI: boolean) {
  */
 export function convertMarkdownToFeishu(md: string, opts: ConvertOptions = {}): ConvertResult {
   const { enableDeAI = false } = opts
-  const tree = buildParser(enableDeAI).parse(md) as Root
+  // \(...\)/\[...\] Pandoc 公式定界符归一化（飞书只认 LaTeX 源码 $...$，转换在 parse 前）
+  const tree = buildParser(enableDeAI).parse(convertPandocMathDelimiters(md)) as Root
   const ctx: ConvertContext = { descendants: [], warnings: [], images: [] }
   const childrenId: string[] = []
 
