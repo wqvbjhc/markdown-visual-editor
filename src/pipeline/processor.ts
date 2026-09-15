@@ -22,6 +22,7 @@ import { remarkMediaDirective } from './plugins/remark-media-directive'
 import { remarkRecoverDirective } from './plugins/remark-recover-directive'
 import { remarkSourceLine } from './plugins/remark-source-line'
 import { convertPandocMathDelimiters } from './pandoc-math'
+import { escapeTableCodePipes } from './table-code-pipe'
 
 function createProcessor(enableDeAI: boolean) {
   const processor = unified()
@@ -66,8 +67,9 @@ const deAIProcessor = createProcessor(true)
 
 export async function processMarkdown(md: string, enableDeAI: boolean = false): Promise<string> {
   const processor = enableDeAI ? deAIProcessor : defaultProcessor
-  // \(...\)/\[...\] Pandoc 公式定界符须在 parse 前归一化成 $/$$，parse 后反斜杠已被吃
-  const file = await processor.process(convertPandocMathDelimiters(md))
+  // \(...\)/\[...\] Pandoc 公式定界符须在 parse 前归一化成 $/$$，parse 后反斜杠已被吃；
+  // 表格里行内代码的裸 | 须在 parse 前转义成 \|（单元格切分先于行内解析，代码 span 自保不了）
+  const file = await processor.process(escapeTableCodePipes(convertPandocMathDelimiters(md)))
   return String(file)
 }
 

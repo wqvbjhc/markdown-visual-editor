@@ -36,6 +36,7 @@ import type {
 } from 'mdast'
 import { remarkDeAI } from '../pipeline/plugins/remark-deai'
 import { convertPandocMathDelimiters } from '../pipeline/pandoc-math'
+import { escapeTableCodePipes } from '../pipeline/table-code-pipe'
 import {
   BlockType,
   type DescendantPayload,
@@ -110,8 +111,9 @@ function buildParser(enableDeAI: boolean) {
  */
 export function convertMarkdownToFeishu(md: string, opts: ConvertOptions = {}): ConvertResult {
   const { enableDeAI = false } = opts
-  // \(...\)/\[...\] Pandoc 公式定界符归一化（飞书只认 LaTeX 源码 $...$，转换在 parse 前）
-  const tree = buildParser(enableDeAI).parse(convertPandocMathDelimiters(md)) as Root
+  // \(...\)/\[...\] Pandoc 公式定界符归一化（飞书只认 LaTeX 源码 $...$，转换在 parse 前）；
+  // 表格里行内代码的裸 | 须在 parse 前转义成 \|（单元格切分先于行内解析）
+  const tree = buildParser(enableDeAI).parse(escapeTableCodePipes(convertPandocMathDelimiters(md))) as Root
   const ctx: ConvertContext = { descendants: [], warnings: [], images: [] }
   const childrenId: string[] = []
 
