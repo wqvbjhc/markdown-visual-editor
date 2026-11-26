@@ -22,6 +22,20 @@ const BASE_PRINT_CSS = `
     min-height: 100vh;
   }
 
+  @supports (zoom: calc(1px / 1px)) {
+    .pdf-shell .katex .base {
+      zoom: min(1, calc(100cqw / var(--print-math-width, 1px)));
+    }
+  }
+
+  .pdf-shell .code-block-content pre code > [data-print-line]::before {
+    content: attr(data-print-line);
+    position: absolute;
+    inset-inline-end: 100%;
+    margin-inline-end: 10px;
+    opacity: 0.7;
+  }
+
   .pdf-shell .export-mobile-notch {
     width: 60px;
     height: 6px;
@@ -67,23 +81,36 @@ function allowPrintOverflow(element: HTMLElement) {
   element.style.overflow = 'visible'
 }
 
+function normalizeExportFlow(clone: HTMLElement) {
+  releaseMeasuredSize(clone)
+
+  // 正文和相邻块始终按纸宽重排。保留公式内部盒子的度量，避免破坏分式、上下标等排版。
+  const flow = '.prose-container, section, div, blockquote, h1, h2, h3, h4, h5, h6, p, ul, ol, li, pre, .katex-display'
+  for (const element of clone.querySelectorAll<HTMLElement>(flow)) {
+    if (element.closest('.katex, svg') || element.classList.contains('code-block-lines')) continue
+    releaseMeasuredSize(element)
+    if (element.matches('.prose-container, .katex-display')) {
+      element.style.setProperty('container-type', 'inline-size')
+    }
+    if (element.classList.contains('prose-container')) {
+      element.style.removeProperty('margin-left')
+      element.style.removeProperty('margin-right')
+      element.style.marginInline = 'auto'
+    }
+  }
+
+  for (const element of clone.querySelectorAll<HTMLElement>('a, :not(pre) > code')) {
+    if (element.closest('pre, .katex, svg')) continue
+    element.style.whiteSpace = 'normal'
+    element.style.overflowWrap = 'anywhere'
+  }
+}
+
 function normalizeExportTables(clone: HTMLElement) {
-  const resized = new Set<HTMLElement>()
   for (const wrapper of clone.querySelectorAll<HTMLElement>('.table-wrapper')) {
     const table = wrapper.querySelector<HTMLElement>(':scope > table')
     if (!table) continue
 
-    // 从表格外壳到预览面板都要释放宽高，否则平台格式的外层 section 仍会锁住纸宽。
-    for (let container: HTMLElement | null = wrapper; container && !resized.has(container); container = container.parentElement) {
-      releaseMeasuredSize(container)
-      resized.add(container)
-      if (container.classList.contains('prose-container')) {
-        container.style.removeProperty('margin-left')
-        container.style.removeProperty('margin-right')
-        container.style.marginInline = 'auto'
-      }
-      if (container === clone) break
-    }
     allowPrintOverflow(wrapper)
     allowPrintOverflow(table)
     releaseMeasuredSize(table)
@@ -100,12 +127,76 @@ function normalizeExportTables(clone: HTMLElement) {
   }
 }
 
+function normalizeExportCode(clone: HTMLElement) {
+  for (const element of clone.querySelectorAll<HTMLElement>('.code-block-wrapper, .code-block-body, .code-block-content, pre')) {
+    allowPrintOverflow(element)
+    element.style.minWidth = '0'
+  }
+
+  for (const element of clone.querySelectorAll<HTMLElement>('pre, pre code, pre code span')) {
+    element.style.whiteSpace = 'pre-wrap'
+    element.style.overflowWrap = 'anywhere'
+  }
+
+  for (const content of clone.querySelectorAll<HTMLElement>('.code-block-content')) {
+    const lines = content.querySelectorAll<HTMLElement>('pre code > .line')
+    if (!lines.length) continue
+
+    // 预览的独立行号列不会跟随折行；打印时把行号放回每个源代码行。
+    const gutter = content.parentElement?.querySelector<HTMLElement>('.code-block-lines')
+    if (gutter) {
+      content.style.paddingInlineStart = gutter.style.width || gutter.style.minWidth || '40px'
+      gutter.style.display = 'none'
+    }
+    lines.forEach((line, index) => {
+      if (gutter) line.dataset.printLine = String(index + 1)
+      line.style.display = 'block'
+      line.style.position = 'relative'
+      line.style.minHeight = '1lh'
+    })
+    // Shiki 在每行 span 间留下换行文本；行已经是块元素，无需再次换行。
+    for (const node of Array.from(lines[0].parentNode!.childNodes)) {
+      if (node.nodeType === 3 && !node.textContent?.trim()) node.remove()
+    }
+  }
+}
+
+function normalizeExportMath(clone: HTMLElement) {
+  for (const display of clone.querySelectorAll<HTMLElement>('.katex-display')) {
+    allowPrintOverflow(display)
+  }
+
+  // 公众号和头条的公式已转换为普通 span；块级和行内都可按文本折行。
+  for (const text of clone.querySelectorAll<HTMLElement>('.katex-semantic, .katex-semantic *')) {
+    text.style.whiteSpace = 'normal'
+    text.style.overflowWrap = 'anywhere'
+  }
+
+  // 只释放公式的外层宽高；在 KaTeX 提供的 base 组之间换行，不拆分式。
+  for (const element of clone.querySelectorAll<HTMLElement>('.katex, .katex > .katex-html')) {
+    releaseMeasuredSize(element)
+    element.style.whiteSpace = 'normal'
+  }
+
+  // 单个公式组（例如宽分式）不能折行。给打印 CSS 保留组宽，仅在纸宽不足时等比缩小。
+  for (const group of clone.querySelectorAll<HTMLElement>('.katex > .katex-html > .base')) {
+    const width = group.style.width
+    if (width.endsWith('px') && parseFloat(width) > 0) {
+      group.style.setProperty('--print-math-width', width)
+      group.style.removeProperty('zoom')
+    }
+  }
+}
+
 function normalizeExportTree(clone: HTMLElement) {
+  normalizeExportFlow(clone)
   allowPrintOverflow(clone)
   clone.style.height = 'auto'
   clone.style.minHeight = 'auto'
   clone.style.flex = 'none'
   normalizeExportTables(clone)
+  normalizeExportCode(clone)
+  normalizeExportMath(clone)
 
   const mobileFrame = clone.querySelector<HTMLElement>('.mobile-frame')
   if (mobileFrame) {

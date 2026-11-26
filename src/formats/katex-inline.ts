@@ -10,6 +10,7 @@ export function inlineKatexStyles(html: string, mode: ExportMode = 'default'): s
     if (!htmlPart) return
     const semantic = katexToSemantic(htmlPart as HTMLElement, mode)
     const wrapper = doc.createElement('span')
+    wrapper.className = 'katex-semantic'
     wrapper.setAttribute('style',
       'font-family:KaTeX_Main,"Times New Roman",serif;font-style:italic;font-size:1.05em;white-space:nowrap;')
     wrapper.innerHTML = semantic
