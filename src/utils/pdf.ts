@@ -54,11 +54,58 @@ function cloneNodeWithComputedStyles(source: HTMLElement): HTMLElement {
   return clone
 }
 
+function releaseMeasuredSize(element: HTMLElement) {
+  // getComputedStyle 包含物理尺寸和逻辑尺寸；只移除 width/height 会留下像素约束。
+  for (const property of ['width', 'height', 'inline-size', 'block-size']) {
+    element.style.removeProperty(property)
+  }
+}
+
+function allowPrintOverflow(element: HTMLElement) {
+  element.style.removeProperty('overflow-inline')
+  element.style.removeProperty('overflow-block')
+  element.style.overflow = 'visible'
+}
+
+function normalizeExportTables(clone: HTMLElement) {
+  const resized = new Set<HTMLElement>()
+  for (const wrapper of clone.querySelectorAll<HTMLElement>('.table-wrapper')) {
+    const table = wrapper.querySelector<HTMLElement>(':scope > table')
+    if (!table) continue
+
+    // 从表格外壳到预览面板都要释放宽高，否则平台格式的外层 section 仍会锁住纸宽。
+    for (let container: HTMLElement | null = wrapper; container && !resized.has(container); container = container.parentElement) {
+      releaseMeasuredSize(container)
+      resized.add(container)
+      if (container.classList.contains('prose-container')) {
+        container.style.removeProperty('margin-left')
+        container.style.removeProperty('margin-right')
+        container.style.marginInline = 'auto'
+      }
+      if (container === clone) break
+    }
+    allowPrintOverflow(wrapper)
+    allowPrintOverflow(table)
+    releaseMeasuredSize(table)
+    table.style.width = '100%'
+
+    for (const part of table.querySelectorAll<HTMLElement>('thead, tbody, tfoot, tr, th, td')) {
+      releaseMeasuredSize(part)
+    }
+    // 内联样式也冻结了子节点的换行设置，长路径、链接和行内代码须在单元格内换行。
+    for (const text of table.querySelectorAll<HTMLElement>('th, td, :is(th, td) :is(a, code, strong, em, del)')) {
+      text.style.overflowWrap = 'anywhere'
+      if (text.tagName === 'CODE') text.style.whiteSpace = 'normal'
+    }
+  }
+}
+
 function normalizeExportTree(clone: HTMLElement) {
-  clone.style.overflow = 'visible'
+  allowPrintOverflow(clone)
   clone.style.height = 'auto'
   clone.style.minHeight = 'auto'
   clone.style.flex = 'none'
+  normalizeExportTables(clone)
 
   const mobileFrame = clone.querySelector<HTMLElement>('.mobile-frame')
   if (mobileFrame) {
